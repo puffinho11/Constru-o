@@ -1,6 +1,48 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
+function Header({ tag, title, desc, button, onClick }) {
+  return (
+    <div className="mb-7 flex items-center justify-between">
+      <div>
+        <span className="mb-3 inline-block rounded-full bg-emerald-100 px-4 py-2 text-[10px] font-black text-emerald-700">
+          {tag}
+        </span>
+
+        <h1 className="text-4xl font-black text-emerald-950">
+          {title}
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-500">
+          {desc}
+        </p>
+      </div>
+
+      {button && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="rounded-2xl bg-emerald-600 px-7 py-4 text-sm font-black text-white shadow-xl shadow-emerald-200 transition hover:bg-emerald-700"
+        >
+          {button}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function Panel({ title, children }) {
+  return (
+    <div className="mb-7 rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
+      <h2 className="text-2xl font-black text-emerald-950">
+        {title}
+      </h2>
+
+      {children}
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
 
@@ -15,6 +57,15 @@ export default function Dashboard() {
 
   const [secretariaEditando, setSecretariaEditando] =
     useState(null)
+
+  const [demanda, setDemanda] = useState({
+    secretaria: "",
+    responsavel: "",
+    numeroDemanda: "",
+    prioridade: "Normal",
+    objeto: "",
+    justificativa: "",
+  })
 
   const [materiais, setMateriais] = useState([
     {
@@ -39,13 +90,19 @@ export default function Dashboard() {
     ["arquivos", "Arquivos"],
   ]
 
+  useEffect(() => {
+    carregarSecretarias()
+  }, [])
+
   async function carregarSecretarias() {
     try {
       const response = await fetch(
         "http://localhost:5000/api/secretarias",
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${localStorage.getItem(
+              "token"
+            )}`,
           },
         }
       )
@@ -58,20 +115,17 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => {
-    carregarSecretarias()
-  }, [])
 
   async function salvarSecretaria(e) {
     e.preventDefault()
 
-    const form = e.currentTarget
+    const formData = new FormData(e.currentTarget)
 
     const dados = {
-      nome: form.nome.value,
-      responsavel: form.responsavel.value,
-      email: form.email.value,
-      telefone: form.telefone.value,
+      nome: formData.get("nome"),
+      responsavel: formData.get("responsavel"),
+      email: formData.get("email"),
+      telefone: formData.get("telefone"),
     }
 
     try {
@@ -79,29 +133,42 @@ export default function Dashboard() {
         ? `http://localhost:5000/api/secretarias/${secretariaEditando._id}`
         : "http://localhost:5000/api/secretarias"
 
-      const method = secretariaEditando ? "PUT" : "POST"
-
-      await fetch(url, {
-        method,
-
+      const response = await fetch(url, {
+        method: secretariaEditando ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-
         body: JSON.stringify(dados),
       })
 
-      form.reset()
+      if (!response.ok) {
+        throw new Error("Erro ao salvar secretaria")
+      }
 
-      setSecretariaEditando(null)
+      alert(
+        secretariaEditando
+          ? "Secretaria atualizada com sucesso"
+          : "Secretaria cadastrada com sucesso"
+      )
 
       setMostrarFormSecretaria(false)
-
+      setSecretariaEditando(null)
       carregarSecretarias()
     } catch (error) {
       console.log(error)
+      alert("Erro ao salvar secretaria")
     }
+  }
+
+  function cancelarFormularioSecretaria() {
+    setMostrarFormSecretaria(false)
+    setSecretariaEditando(null)
+  }
+
+  function editarSecretaria(secretaria) {
+    setSecretariaEditando(secretaria)
+    setMostrarFormSecretaria(true)
   }
 
   async function excluirSecretaria(id) {
@@ -109,44 +176,31 @@ export default function Dashboard() {
       "Deseja realmente excluir esta secretaria?"
     )
 
-    if (!confirmar) return
+    if (!confirmar) {
+      return
+    }
 
     try {
-      await fetch(`http://localhost:5000/api/secretarias/${id}`, {
-        method: "DELETE",
+      const response = await fetch(
+        `http://localhost:5000/api/secretarias/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      )
 
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
+      if (!response.ok) {
+        throw new Error("Erro ao excluir secretaria")
+      }
 
+      alert("Secretaria excluída com sucesso")
       carregarSecretarias()
     } catch (error) {
       console.log(error)
+      alert("Erro ao excluir secretaria")
     }
-  }
-
-  function abrirCadastroSecretaria() {
-    setSecretariaEditando(null)
-
-    setMostrarFormSecretaria(true)
-  }
-
-  function editarSecretaria(secretaria) {
-    setSecretariaEditando(secretaria)
-
-    setMostrarFormSecretaria(true)
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    })
-  }
-
-  function cancelarFormularioSecretaria() {
-    setSecretariaEditando(null)
-
-    setMostrarFormSecretaria(false)
   }
 
   function adicionarItem() {
@@ -169,66 +223,85 @@ export default function Dashboard() {
   }
 
   function alterarItem(id, campo, valor) {
-    setMateriais(
-      materiais.map((item) =>
+    setMateriais((old) =>
+      old.map((item) =>
         item.id === id
-          ? { ...item, [campo]: valor }
+          ? {
+              ...item,
+              [campo]: valor,
+            }
           : item
       )
     )
   }
 
+  async function salvarDemanda() {
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/demandas",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+
+            Authorization: `Bearer ${localStorage.getItem(
+              "token"
+            )}`,
+          },
+
+          body: JSON.stringify({
+            numeroDemanda: demanda.numeroDemanda,
+            secretaria: demanda.secretaria,
+            responsavel: demanda.responsavel,
+            prioridade: demanda.prioridade,
+            objeto: demanda.objeto,
+            justificativa: demanda.justificativa,
+            materiais,
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error("Erro ao salvar")
+      }
+
+      alert("Demanda salva com sucesso")
+
+      setDemanda({
+        secretaria: "",
+        responsavel: "",
+        numeroDemanda: "",
+        prioridade: "Normal",
+        objeto: "",
+        justificativa: "",
+      })
+
+      setMateriais([
+        {
+          id: 1,
+          item: "",
+          quantidade: "",
+          unidade: "",
+          observacao: "",
+        },
+      ])
+    } catch (error) {
+      console.log(error)
+
+      alert("Erro ao salvar demanda")
+    }
+  }
+
   function sair() {
     localStorage.removeItem("token")
+
     localStorage.removeItem("user")
 
     navigate("/")
   }
 
-  const Header = ({
-    tag,
-    title,
-    desc,
-    button,
-    onClick,
-  }) => (
-    <div className="mb-7 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-      <div>
-        <span className="mb-3 inline-block rounded-full bg-emerald-100 px-4 py-2 text-[10px] font-black text-emerald-700">
-          {tag}
-        </span>
-
-        <h1 className="text-4xl font-black tracking-tight text-emerald-950">
-          {title}
-        </h1>
-
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-slate-500">
-          {desc}
-        </p>
-      </div>
-
-      {button && (
-        <button
-          onClick={onClick}
-          className="rounded-2xl bg-emerald-600 px-7 py-4 text-sm font-black text-white shadow-xl shadow-emerald-200 transition hover:bg-emerald-700"
-        >
-          {button}
-        </button>
-      )}
-    </div>
-  )
-
-  const Panel = ({ title, children }) => (
-    <div className="mb-7 rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
-      <h2 className="text-2xl font-black text-emerald-950">
-        {title}
-      </h2>
-
-      {children}
-    </div>
-  )
-  function Painel() {
-  return (
+  const Painel = (
     <>
       <Header
         tag="Visão geral"
@@ -239,69 +312,37 @@ export default function Dashboard() {
       />
 
       <div className="mb-7 grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-4">
-        <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
-          <div className="absolute -bottom-10 -right-10 h-28 w-28 rounded-full bg-emerald-100" />
+        {[
+          ["Demandas abertas", "0", "Nenhuma demanda cadastrada", "emerald"],
+          ["Secretarias ativas", secretarias.length, "Secretarias cadastradas no sistema", "emerald"],
+          ["Fornecedores", "0", "Nenhum fornecedor cadastrado", "emerald"],
+          ["Pendências", "0", "Nenhuma pendência no momento", "red"],
+        ].map(([titulo, valor, texto, cor]) => (
+          <div
+            key={titulo}
+            className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl"
+          >
+            <div
+              className={`absolute -bottom-10 -right-10 h-28 w-28 rounded-full ${
+                cor === "red" ? "bg-red-100" : "bg-emerald-100"
+              }`}
+            />
 
-          <span className="text-xs text-slate-500">
-            Demandas abertas
-          </span>
+            <span className="text-xs text-slate-500">{titulo}</span>
 
-          <strong className="relative mt-2 mb-2 block text-4xl font-black text-emerald-950">
-            0
-          </strong>
+            <strong
+              className={`relative mt-2 mb-2 block text-4xl font-black ${
+                cor === "red" ? "text-red-600" : "text-emerald-950"
+              }`}
+            >
+              {valor}
+            </strong>
 
-          <small className="relative text-xs text-slate-400">
-            Nenhuma demanda cadastrada
-          </small>
-        </div>
-
-        <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
-          <div className="absolute -bottom-10 -right-10 h-28 w-28 rounded-full bg-emerald-100" />
-
-          <span className="text-xs text-slate-500">
-            Secretarias ativas
-          </span>
-
-          <strong className="relative mt-2 mb-2 block text-4xl font-black text-emerald-950">
-            {secretarias.length}
-          </strong>
-
-          <small className="relative text-xs text-slate-400">
-            Secretarias cadastradas no sistema
-          </small>
-        </div>
-
-        <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
-          <div className="absolute -bottom-10 -right-10 h-28 w-28 rounded-full bg-emerald-100" />
-
-          <span className="text-xs text-slate-500">
-            Fornecedores
-          </span>
-
-          <strong className="relative mt-2 mb-2 block text-4xl font-black text-emerald-950">
-            0
-          </strong>
-
-          <small className="relative text-xs text-slate-400">
-            Nenhum fornecedor cadastrado
-          </small>
-        </div>
-
-        <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
-          <div className="absolute -bottom-10 -right-10 h-28 w-28 rounded-full bg-red-100" />
-
-          <span className="text-xs text-slate-500">
-            Pendências
-          </span>
-
-          <strong className="relative mt-2 mb-2 block text-4xl font-black text-red-600">
-            0
-          </strong>
-
-          <small className="relative text-xs text-slate-400">
-            Nenhuma pendência no momento
-          </small>
-        </div>
+            <small className="relative text-xs text-slate-400">
+              {texto}
+            </small>
+          </div>
+        ))}
       </div>
 
       <div className="mb-7 grid grid-cols-1 gap-6 xl:grid-cols-[1.5fr_1fr]">
@@ -324,56 +365,33 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
             {[
-              [
-                "01",
-                "Demanda",
-                "Secretaria informa os materiais necessários.",
-              ],
-
-              [
-                "02",
-                "Orçamento",
-                "Itens são organizados e conferidos.",
-              ],
-
-              [
-                "03",
-                "Solicitação",
-                "Envio para fornecedores credenciados.",
-              ],
-
-              [
-                "04",
-                "Propostas",
-                "Recebimento e análise das cotações.",
-              ],
-
-              [
-                "05",
-                "Resultado",
-                "Classificação e relatório final.",
-              ],
-            ].map((item) => (
+              ["01", "Demanda", "Secretaria informa os materiais necessários."],
+              ["02", "Orçamento", "Itens são organizados e conferidos."],
+              ["03", "Solicitação", "Envio para fornecedores credenciados."],
+              ["04", "Propostas", "Recebimento e análise das cotações."],
+              ["05", "Resultado", "Classificação e relatório final."],
+            ].map(([numero, titulo, texto]) => (
               <div
-                key={item[0]}
+                key={numero}
                 className="rounded-3xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-1 hover:shadow-lg"
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-sm font-black text-white">
-                  {item[0]}
+                  {numero}
                 </div>
 
                 <h3 className="mt-5 text-xl font-black text-emerald-950">
-                  {item[1]}
+                  {titulo}
                 </h3>
 
                 <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                  {item[2]}
+                  {texto}
                 </p>
               </div>
             ))}
           </div>
         </div>
-                <div className="rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
           <h2 className="text-2xl font-black text-emerald-950">
             Alertas do Sistema
           </h2>
@@ -382,35 +400,29 @@ export default function Dashboard() {
             Pontos que precisam de atenção.
           </p>
 
-          <div className="mt-6 grid gap-4">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="h-3 w-3 rounded-full bg-emerald-500" />
+          <div className="mt-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="h-3 w-3 rounded-full bg-emerald-500" />
 
-              <span className="text-sm font-medium text-slate-600">
-                Nenhum alerta registrado no momento.
-              </span>
-            </div>
+            <span className="text-sm font-medium text-slate-600">
+              Nenhum alerta registrado no momento.
+            </span>
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
         <div className="rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
           <h2 className="text-2xl font-black text-emerald-950">
             Atividades Recentes
           </h2>
 
-          <div className="mt-6 grid gap-4">
-            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div>
-                <strong className="text-sm text-emerald-700">
-                  Hoje
-                </strong>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <strong className="text-sm text-emerald-700">
+              Hoje
+            </strong>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Nenhuma movimentação registrada ainda.
-                </p>
-              </div>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Nenhuma movimentação registrada ainda.
+            </p>
           </div>
         </div>
 
@@ -420,50 +432,41 @@ export default function Dashboard() {
           </h2>
 
           <div className="mt-6 grid gap-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <span className="text-xs text-slate-500">
-                Valor de referência
-              </span>
+            {[
+              ["Valor de referência", "R$ 0,00"],
+              ["Menores propostas", "R$ 0,00"],
+              ["Economia estimada", "R$ 0,00"],
+            ].map(([titulo, valor]) => (
+              <div
+                key={titulo}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+              >
+                <span className="text-xs text-slate-500">
+                  {titulo}
+                </span>
 
-              <strong className="mt-2 block text-3xl font-black text-emerald-950">
-                R$ 0,00
-              </strong>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <span className="text-xs text-slate-500">
-                Menores propostas
-              </span>
-
-              <strong className="mt-2 block text-3xl font-black text-emerald-950">
-                R$ 0,00
-              </strong>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <span className="text-xs text-slate-500">
-                Economia estimada
-              </span>
-
-              <strong className="mt-2 block text-3xl font-black text-emerald-700">
-                R$ 0,00
-              </strong>
-            </div>
+                <strong className="mt-2 block text-3xl font-black text-emerald-950">
+                  {valor}
+                </strong>
+              </div>
+            ))}
           </div>
         </div>
       </div>
     </>
   )
-}
-function SecretariasPage() {
-  return (
+
+  const SecretariasPage = (
     <>
       <Header
         tag="Gestão interna"
         title="Secretarias Participantes"
         desc="Cadastro e acompanhamento das secretarias autorizadas a abrir demandas."
         button="Cadastrar Secretaria"
-        onClick={abrirCadastroSecretaria}
+        onClick={() => {
+          setSecretariaEditando(null)
+          setMostrarFormSecretaria(true)
+        }}
       />
 
       {mostrarFormSecretaria && (
@@ -481,6 +484,7 @@ function SecretariasPage() {
           >
             <label className="grid gap-2 text-sm font-black text-slate-700">
               Nome da Secretaria
+
               <input
                 name="nome"
                 type="text"
@@ -493,6 +497,7 @@ function SecretariasPage() {
 
             <label className="grid gap-2 text-sm font-black text-slate-700">
               Responsável
+
               <input
                 name="responsavel"
                 type="text"
@@ -505,6 +510,7 @@ function SecretariasPage() {
 
             <label className="grid gap-2 text-sm font-black text-slate-700">
               E-mail
+
               <input
                 name="email"
                 type="email"
@@ -514,9 +520,9 @@ function SecretariasPage() {
                 required
               />
             </label>
-
-            <label className="grid gap-2 text-sm font-black text-slate-700">
+                        <label className="grid gap-2 text-sm font-black text-slate-700">
               Telefone
+
               <input
                 name="telefone"
                 type="text"
@@ -546,8 +552,8 @@ function SecretariasPage() {
             </div>
           </form>
         </Panel>
-      )
-}
+      )}
+
       <Panel title="Secretarias Cadastradas">
         <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
           <table className="w-full border-collapse">
@@ -621,9 +627,7 @@ function SecretariasPage() {
                       <div className="flex items-center justify-center gap-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            editarSecretaria(secretaria)
-                          }
+                          onClick={() => editarSecretaria(secretaria)}
                           className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-lg text-blue-700 transition hover:bg-blue-200"
                         >
                           ✏️
@@ -631,9 +635,7 @@ function SecretariasPage() {
 
                         <button
                           type="button"
-                          onClick={() =>
-                            excluirSecretaria(secretaria._id)
-                          }
+                          onClick={() => excluirSecretaria(secretaria._id)}
                           className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-lg font-black text-red-700 transition hover:bg-red-200"
                         >
                           ✕
@@ -649,15 +651,14 @@ function SecretariasPage() {
       </Panel>
     </>
   )
-}
-function NovaDemandaPage() {
-  return (
+    const NovaDemandaPage = (
     <>
       <Header
         tag="Abertura da necessidade"
         title="Nova Demanda"
         desc="Cadastro profissional da solicitação de materiais pelas secretarias municipais."
         button="Salvar Demanda"
+        onClick={salvarDemanda}
       />
 
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.5fr_0.7fr]">
@@ -667,13 +668,20 @@ function NovaDemandaPage() {
               <label className="grid gap-2 text-sm font-black text-slate-700">
                 Secretaria Solicitante
 
-                <select className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100">
-                  <option>
-                    Selecione a secretaria
-                  </option>
+                <select
+                  value={demanda.secretaria}
+                  onChange={(e) =>
+                    setDemanda({
+                      ...demanda,
+                      secretaria: e.target.value,
+                    })
+                  }
+                  className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                >
+                  <option value="">Selecione a secretaria</option>
 
                   {secretarias.map((secretaria) => (
-                    <option key={secretaria._id}>
+                    <option key={secretaria._id} value={secretaria.nome}>
                       {secretaria.nome}
                     </option>
                   ))}
@@ -685,6 +693,13 @@ function NovaDemandaPage() {
 
                 <input
                   type="text"
+                  value={demanda.responsavel}
+                  onChange={(e) =>
+                    setDemanda({
+                      ...demanda,
+                      responsavel: e.target.value,
+                    })
+                  }
                   placeholder="Nome do responsável"
                   className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
@@ -695,6 +710,13 @@ function NovaDemandaPage() {
 
                 <input
                   type="text"
+                  value={demanda.numeroDemanda}
+                  onChange={(e) =>
+                    setDemanda({
+                      ...demanda,
+                      numeroDemanda: e.target.value,
+                    })
+                  }
                   placeholder="Ex: 004/2026"
                   className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
@@ -703,11 +725,18 @@ function NovaDemandaPage() {
               <label className="grid gap-2 text-sm font-black text-slate-700">
                 Prioridade
 
-                <select className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100">
+                <select
+                  value={demanda.prioridade}
+                  onChange={(e) =>
+                    setDemanda({
+                      ...demanda,
+                      prioridade: e.target.value,
+                    })
+                  }
+                  className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                >
                   <option>Normal</option>
-
                   <option>Urgente</option>
-
                   <option>Emergencial</option>
                 </select>
               </label>
@@ -717,6 +746,13 @@ function NovaDemandaPage() {
 
                 <input
                   type="text"
+                  value={demanda.objeto}
+                  onChange={(e) =>
+                    setDemanda({
+                      ...demanda,
+                      objeto: e.target.value,
+                    })
+                  }
                   placeholder="Ex: Aquisição de materiais de construção para manutenção predial"
                   className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
@@ -727,6 +763,13 @@ function NovaDemandaPage() {
 
                 <textarea
                   rows="6"
+                  value={demanda.justificativa}
+                  onChange={(e) =>
+                    setDemanda({
+                      ...demanda,
+                      justificativa: e.target.value,
+                    })
+                  }
                   placeholder="Descreva a necessidade da contratação..."
                   className="resize-none rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
@@ -748,9 +791,7 @@ function NovaDemandaPage() {
                     {materiais.length > 1 && (
                       <button
                         type="button"
-                        onClick={() =>
-                          removerItem(material.id)
-                        }
+                        onClick={() => removerItem(material.id)}
                         className="rounded-xl bg-red-100 px-4 py-2 text-xs font-black text-red-700 transition hover:bg-red-200"
                       >
                         Remover
@@ -932,6 +973,7 @@ function NovaDemandaPage() {
 
               <button
                 type="button"
+                onClick={salvarDemanda}
                 className="rounded-2xl bg-emerald-600 p-5 text-sm font-black text-white shadow-xl shadow-emerald-200 transition hover:bg-emerald-700"
               >
                 Salvar Demanda
@@ -942,148 +984,126 @@ function NovaDemandaPage() {
       </div>
     </>
   )
-}
-function TelaPadrao({ titulo, tag, descricao }) {
+
   return (
-    <>
-      <Header
-        tag={tag}
-        title={titulo}
-        desc={descricao}
-        button="Novo Cadastro"
-      />
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-100 text-slate-900">
+      <aside className="fixed left-0 top-0 z-20 flex h-screen w-60 flex-col justify-between overflow-y-auto bg-gradient-to-b from-emerald-950 to-emerald-700 p-5 text-white shadow-2xl">
+        <div>
+          <div className="flex items-center gap-3 border-b border-white/20 pb-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-black text-emerald-700">
+              GC
+            </div>
 
-      <Panel title="Nenhum registro cadastrado">
-        <p className="mt-3 text-sm text-slate-500">
-          Quando houver informações cadastradas no sistema,
-          elas aparecerão aqui automaticamente.
-        </p>
-      </Panel>
-    </>
-  )
-}
+            <div>
+              <h2 className="text-lg font-black leading-tight">
+                Credenciamento
+              </h2>
 
-return (
-  <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-100 text-slate-900">
-    <aside className="fixed left-0 top-0 z-20 flex h-screen w-60 flex-col justify-between overflow-y-auto bg-gradient-to-b from-emerald-950 to-emerald-700 p-5 text-white shadow-2xl">
-      <div>
-        <div className="flex items-center gap-3 border-b border-white/20 pb-6">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-black text-emerald-700">
-            GC
+              <p className="text-[10px] text-white/80">
+                Materiais de Construção
+              </p>
+            </div>
           </div>
 
-          <div>
-            <h2 className="text-lg font-black leading-tight">
-              Credenciamento
-            </h2>
-
-            <p className="text-[10px] text-white/80">
-              Materiais de Construção
-            </p>
-          </div>
+          <nav className="mt-7 grid gap-2">
+            {menu.map(([id, nome]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTelaAtual(id)}
+                className={`rounded-2xl px-4 py-3 text-left text-sm font-black transition-all ${
+                  telaAtual === id
+                    ? "translate-x-1 bg-white/20"
+                    : "hover:bg-white/10"
+                }`}
+              >
+                {nome}
+              </button>
+            ))}
+          </nav>
         </div>
 
-        <nav className="mt-7 grid gap-2">
-          {menu.map(([id, nome]) => (
-            <button
-              key={id}
-              onClick={() => setTelaAtual(id)}
-              className={`rounded-2xl px-4 py-3 text-left text-sm font-black transition-all ${
-                telaAtual === id
-                  ? "translate-x-1 bg-white/20"
-                  : "hover:bg-white/10"
-              }`}
-            >
-              {nome}
-            </button>
-          ))}
-        </nav>
-      </div>
+        <div className="mt-8 grid gap-2">
+          <small className="text-xs text-white/70">
+            Usuário logado
+          </small>
 
-      <div className="mt-8 grid gap-2">
-        <small className="text-xs text-white/70">
-          Usuário logado
-        </small>
+          <strong className="text-base">
+            {user?.nome || "Administrador"}
+          </strong>
 
-        <strong className="text-base">
-          {user?.nome || "Administrador"}
-        </strong>
+          <button
+            type="button"
+            onClick={sair}
+            className="mt-3 rounded-2xl bg-red-500 p-4 text-sm font-black text-white transition hover:bg-red-600"
+          >
+            Sair
+          </button>
+        </div>
+      </aside>
+      <main className="ml-60 p-8">
+        {telaAtual === "painel" && Painel}
 
-        <button
-          onClick={sair}
-          className="mt-3 rounded-2xl bg-red-500 p-4 text-sm font-black text-white transition hover:bg-red-600"
-        >
-          Sair
-        </button>
-      </div>
-    </aside>
-        <main className="ml-60 p-8">
-      {telaAtual === "painel" && <Painel />}
+        {telaAtual === "secretarias" && SecretariasPage}
 
-      {telaAtual === "secretarias" && (
-        <SecretariasPage />
-      )}
+        {telaAtual === "demanda" && NovaDemandaPage}
 
-      {telaAtual === "demanda" && (
-        <NovaDemandaPage />
-      )}
+        {telaAtual === "orcamento" && (
+          <Panel title="Orçamento">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de orçamento em desenvolvimento.
+            </p>
+          </Panel>
+        )}
 
-      {telaAtual === "orcamento" && (
-        <TelaPadrao
-          titulo="Orçamento da Secretaria"
-          tag="Itens e quantitativos"
-          descricao="Cadastro dos materiais, quantidades e finalidade de uso."
-        />
-      )}
+        {telaAtual === "solicitacao" && (
+          <Panel title="Solicitação">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de solicitação em desenvolvimento.
+            </p>
+          </Panel>
+        )}
 
-      {telaAtual === "solicitacao" && (
-        <TelaPadrao
-          titulo="Solicitação aos Fornecedores"
-          tag="Envio de cotação"
-          descricao="Preparação e envio da solicitação de orçamento."
-        />
-      )}
+        {telaAtual === "fornecedores" && (
+          <Panel title="Fornecedores">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de fornecedores em desenvolvimento.
+            </p>
+          </Panel>
+        )}
 
-      {telaAtual === "fornecedores" && (
-        <TelaPadrao
-          titulo="Fornecedores Credenciados"
-          tag="Cadastro externo"
-          descricao="Empresas aptas a receber pedidos de orçamento."
-        />
-      )}
+        {telaAtual === "propostas" && (
+          <Panel title="Propostas">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de propostas em desenvolvimento.
+            </p>
+          </Panel>
+        )}
 
-      {telaAtual === "propostas" && (
-        <TelaPadrao
-          titulo="Propostas Recebidas"
-          tag="Recebimento"
-          descricao="Controle das cotações encaminhadas."
-        />
-      )}
+        {telaAtual === "julgamento" && (
+          <Panel title="Julgamento">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de julgamento em desenvolvimento.
+            </p>
+          </Panel>
+        )}
 
-      {telaAtual === "julgamento" && (
-        <TelaPadrao
-          titulo="Julgamento"
-          tag="Classificação"
-          descricao="Classificação das propostas válidas."
-        />
-      )}
+        {telaAtual === "resultado" && (
+          <Panel title="Resultado">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de resultado em desenvolvimento.
+            </p>
+          </Panel>
+        )}
 
-      {telaAtual === "resultado" && (
-        <TelaPadrao
-          titulo="Resultado Final"
-          tag="Finalização"
-          descricao="Apuração dos fornecedores vencedores."
-        />
-      )}
-
-      {telaAtual === "arquivos" && (
-        <TelaPadrao
-          titulo="Arquivos do Processo"
-          tag="Documentos"
-          descricao="Organização dos documentos do credenciamento."
-        />
-      )}
-    </main>
-  </div>
-)
+        {telaAtual === "arquivos" && (
+          <Panel title="Arquivos">
+            <p className="mt-4 text-sm text-slate-500">
+              Tela de arquivos em desenvolvimento.
+            </p>
+          </Panel>
+        )}
+      </main>
+    </div>
+  )
 }
