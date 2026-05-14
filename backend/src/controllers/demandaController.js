@@ -2,84 +2,86 @@ import Demanda from "../models/Demanda.js"
 
 export async function criarDemanda(req, res) {
   try {
-    const demanda = await Demanda.create({
-      ...req.body,
-      criadoPor: req.user.id,
-    })
+    const demanda = await Demanda.create(req.body)
 
     res.status(201).json(demanda)
   } catch (error) {
+    console.log(error)
+
     res.status(500).json({
-      message: "Erro ao criar demanda",
-      error: error.message,
+      erro: "Erro ao criar demanda",
     })
   }
 }
 
 export async function listarDemandas(req, res) {
   try {
-    const demandas = await Demanda.find()
-      .sort({ createdAt: -1 })
+    const demandas = await Demanda.find().sort({
+      createdAt: -1,
+    })
 
     res.json(demandas)
   } catch (error) {
+    console.log(error)
+
     res.status(500).json({
-      message: "Erro ao listar demandas",
+      erro: "Erro ao listar demandas",
     })
   }
 }
 
 export async function buscarDemanda(req, res) {
   try {
-    const demanda = await Demanda.findById(
-      req.params.id
-    )
+    const demanda = await Demanda.findById(req.params.id)
 
     if (!demanda) {
       return res.status(404).json({
-        message: "Demanda não encontrada",
+        erro: "Demanda não encontrada",
       })
     }
 
     res.json(demanda)
   } catch (error) {
+    console.log(error)
+
     res.status(500).json({
-      message: "Erro ao buscar demanda",
+      erro: "Erro ao buscar demanda",
     })
   }
 }
 
 export async function atualizarDemanda(req, res) {
   try {
-    const demanda =
-      await Demanda.findByIdAndUpdate(
-        req.params.id,
-        req.body,
-        {
-          new: true,
-        }
-      )
+    const demanda = await Demanda.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+      }
+    )
 
     res.json(demanda)
   } catch (error) {
+    console.log(error)
+
     res.status(500).json({
-      message: "Erro ao atualizar demanda",
+      erro: "Erro ao atualizar demanda",
     })
   }
 }
 
 export async function excluirDemanda(req, res) {
   try {
-    await Demanda.findByIdAndDelete(
-      req.params.id
-    )
+    await Demanda.findByIdAndDelete(req.params.id)
 
     res.json({
-      message: "Demanda removida",
+      mensagem: "Demanda removida",
     })
   } catch (error) {
+    console.log(error)
+
     res.status(500).json({
-      message: "Erro ao excluir demanda",
+      erro: "Erro ao excluir demanda",
     })
   }
 }

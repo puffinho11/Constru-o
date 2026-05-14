@@ -49,14 +49,10 @@ export default function Dashboard() {
   const user = JSON.parse(localStorage.getItem("user"))
 
   const [telaAtual, setTelaAtual] = useState("painel")
-
   const [secretarias, setSecretarias] = useState([])
-
-  const [mostrarFormSecretaria, setMostrarFormSecretaria] =
-    useState(false)
-
-  const [secretariaEditando, setSecretariaEditando] =
-    useState(null)
+  const [demandas, setDemandas] = useState([])
+  const [mostrarFormSecretaria, setMostrarFormSecretaria] = useState(false)
+  const [secretariaEditando, setSecretariaEditando] = useState(null)
 
   const [demanda, setDemanda] = useState({
     secretaria: "",
@@ -92,20 +88,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     carregarSecretarias()
+    carregarDemandas()
   }, [])
 
   async function carregarSecretarias() {
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/secretarias",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "token"
-            )}`,
-          },
-        }
-      )
+      const response = await fetch("http://localhost:5000/api/secretarias", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
 
       const data = await response.json()
 
@@ -115,17 +107,32 @@ export default function Dashboard() {
     }
   }
 
+  async function carregarDemandas() {
+    try {
+      const response = await fetch("http://localhost:5000/api/demandas", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+
+      const data = await response.json()
+
+      setDemandas(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.log(error)
+    }
+  }
 
   async function salvarSecretaria(e) {
     e.preventDefault()
 
-    const formData = new FormData(e.currentTarget)
+    const form = e.target
 
     const dados = {
-      nome: formData.get("nome"),
-      responsavel: formData.get("responsavel"),
-      email: formData.get("email"),
-      telefone: formData.get("telefone"),
+      nome: form.nome.value,
+      responsavel: form.responsavel.value,
+      email: form.email.value,
+      telefone: form.telefone.value,
     }
 
     try {
@@ -133,8 +140,10 @@ export default function Dashboard() {
         ? `http://localhost:5000/api/secretarias/${secretariaEditando._id}`
         : "http://localhost:5000/api/secretarias"
 
+      const method = secretariaEditando ? "PUT" : "POST"
+
       const response = await fetch(url, {
-        method: secretariaEditando ? "PUT" : "POST",
+        method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -146,24 +155,14 @@ export default function Dashboard() {
         throw new Error("Erro ao salvar secretaria")
       }
 
-      alert(
-        secretariaEditando
-          ? "Secretaria atualizada com sucesso"
-          : "Secretaria cadastrada com sucesso"
-      )
+      await carregarSecretarias()
 
       setMostrarFormSecretaria(false)
       setSecretariaEditando(null)
-      carregarSecretarias()
     } catch (error) {
       console.log(error)
       alert("Erro ao salvar secretaria")
     }
-  }
-
-  function cancelarFormularioSecretaria() {
-    setMostrarFormSecretaria(false)
-    setSecretariaEditando(null)
   }
 
   function editarSecretaria(secretaria) {
@@ -171,32 +170,31 @@ export default function Dashboard() {
     setMostrarFormSecretaria(true)
   }
 
+  function cancelarFormularioSecretaria() {
+    setSecretariaEditando(null)
+    setMostrarFormSecretaria(false)
+  }
+
   async function excluirSecretaria(id) {
-    const confirmar = window.confirm(
-      "Deseja realmente excluir esta secretaria?"
-    )
+    const confirmar = confirm("Deseja realmente excluir esta secretaria?")
 
     if (!confirmar) {
       return
     }
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/secretarias/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      )
+      const response = await fetch(`http://localhost:5000/api/secretarias/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
 
       if (!response.ok) {
         throw new Error("Erro ao excluir secretaria")
       }
 
-      alert("Secretaria excluída com sucesso")
-      carregarSecretarias()
+      await carregarSecretarias()
     } catch (error) {
       console.log(error)
       alert("Erro ao excluir secretaria")
@@ -217,9 +215,7 @@ export default function Dashboard() {
   }
 
   function removerItem(id) {
-    setMateriais(
-      materiais.filter((item) => item.id !== id)
-    )
+    setMateriais(materiais.filter((item) => item.id !== id))
   }
 
   function alterarItem(id, campo, valor) {
@@ -237,36 +233,33 @@ export default function Dashboard() {
 
   async function salvarDemanda() {
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/demandas",
-        {
-          method: "POST",
+      const response = await fetch("http://localhost:5000/api/demandas", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          numeroDemanda: demanda.numeroDemanda,
+          secretaria: demanda.secretaria,
+          responsavel: demanda.responsavel,
+          prioridade: demanda.prioridade,
+          objeto: demanda.objeto,
+          justificativa: demanda.justificativa,
+          materiais,
+        }),
+      })
 
-          headers: {
-            "Content-Type": "application/json",
-
-            Authorization: `Bearer ${localStorage.getItem(
-              "token"
-            )}`,
-          },
-
-          body: JSON.stringify({
-            numeroDemanda: demanda.numeroDemanda,
-            secretaria: demanda.secretaria,
-            responsavel: demanda.responsavel,
-            prioridade: demanda.prioridade,
-            objeto: demanda.objeto,
-            justificativa: demanda.justificativa,
-            materiais,
-          }),
-        }
-      )
+      const data = await response.json()
 
       if (!response.ok) {
-        throw new Error("Erro ao salvar")
+        alert(data.erro || "Erro ao salvar demanda")
+        return
       }
 
       alert("Demanda salva com sucesso")
+
+      await carregarDemandas()
 
       setDemanda({
         secretaria: "",
@@ -286,18 +279,44 @@ export default function Dashboard() {
           observacao: "",
         },
       ])
+
+      setTelaAtual("painel")
     } catch (error) {
       console.log(error)
-
       alert("Erro ao salvar demanda")
+    }
+  }
+
+
+  async function excluirDemanda(id) {
+    const confirmar = confirm("Deseja realmente excluir esta demanda?")
+
+    if (!confirmar) {
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/demandas/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Erro ao excluir demanda")
+      }
+
+      await carregarDemandas()
+    } catch (error) {
+      console.log(error)
+      alert("Erro ao excluir demanda")
     }
   }
 
   function sair() {
     localStorage.removeItem("token")
-
     localStorage.removeItem("user")
-
     navigate("/")
   }
 
@@ -313,7 +332,7 @@ export default function Dashboard() {
 
       <div className="mb-7 grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-4">
         {[
-          ["Demandas abertas", "0", "Nenhuma demanda cadastrada", "emerald"],
+          ["Demandas abertas", demandas.length, "Demandas cadastradas no sistema", "emerald"],
           ["Secretarias ativas", secretarias.length, "Secretarias cadastradas no sistema", "emerald"],
           ["Fornecedores", "0", "Nenhum fornecedor cadastrado", "emerald"],
           ["Pendências", "0", "Nenhuma pendência no momento", "red"],
@@ -328,7 +347,9 @@ export default function Dashboard() {
               }`}
             />
 
-            <span className="text-xs text-slate-500">{titulo}</span>
+            <span className="text-xs text-slate-500">
+              {titulo}
+            </span>
 
             <strong
               className={`relative mt-2 mb-2 block text-4xl font-black ${
@@ -409,20 +430,56 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_1fr]">
         <div className="rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
           <h2 className="text-2xl font-black text-emerald-950">
             Atividades Recentes
           </h2>
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <strong className="text-sm text-emerald-700">
-              Hoje
-            </strong>
+          <div className="mt-6 grid gap-3">
+            {demandas.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <strong className="text-sm text-emerald-700">
+                  Hoje
+                </strong>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Nenhuma movimentação registrada ainda.
-            </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Nenhuma movimentação registrada ainda.
+                </p>
+              </div>
+            ) : (
+              demandas.slice(0, 5).map((item) => (
+                <div
+                  key={item._id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <strong className="text-sm text-emerald-700">
+                        Demanda {item.numeroDemanda}
+                      </strong>
+
+                      <p className="mt-1 text-sm font-semibold text-slate-700">
+                        {item.objeto}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Secretaria: {item.secretaria || "Não informada"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => excluirDemanda(item._id)}
+                      className="rounded-xl bg-red-100 px-4 py-2 text-xs font-black text-red-700 transition hover:bg-red-200"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -470,13 +527,7 @@ export default function Dashboard() {
       />
 
       {mostrarFormSecretaria && (
-        <Panel
-          title={
-            secretariaEditando
-              ? "Editar Secretaria"
-              : "Nova Secretaria"
-          }
-        >
+        <Panel title={secretariaEditando ? "Editar Secretaria" : "Nova Secretaria"}>
           <form
             key={secretariaEditando?._id || "nova-secretaria"}
             onSubmit={salvarSecretaria}
@@ -520,7 +571,8 @@ export default function Dashboard() {
                 required
               />
             </label>
-                        <label className="grid gap-2 text-sm font-black text-slate-700">
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
               Telefone
 
               <input
@@ -537,9 +589,7 @@ export default function Dashboard() {
                 type="submit"
                 className="flex-1 rounded-2xl bg-emerald-600 p-4 text-sm font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700"
               >
-                {secretariaEditando
-                  ? "Salvar Alterações"
-                  : "Salvar Secretaria"}
+                {secretariaEditando ? "Salvar Alterações" : "Salvar Secretaria"}
               </button>
 
               <button
@@ -651,7 +701,8 @@ export default function Dashboard() {
       </Panel>
     </>
   )
-    const NovaDemandaPage = (
+
+  const NovaDemandaPage = (
     <>
       <Header
         tag="Abertura da necessidade"
@@ -678,10 +729,15 @@ export default function Dashboard() {
                   }
                   className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 >
-                  <option value="">Selecione a secretaria</option>
+                  <option value="">
+                    Selecione a secretaria
+                  </option>
 
                   {secretarias.map((secretaria) => (
-                    <option key={secretaria._id} value={secretaria.nome}>
+                    <option
+                      key={secretaria._id}
+                      value={secretaria.nome}
+                    >
                       {secretaria.nome}
                     </option>
                   ))}
@@ -776,7 +832,8 @@ export default function Dashboard() {
               </label>
             </div>
           </Panel>
-                    <Panel title="Materiais Solicitados">
+
+          <Panel title="Materiais Solicitados">
             <div className="mt-6 grid gap-5">
               {materiais.map((material, index) => (
                 <div
@@ -807,11 +864,7 @@ export default function Dashboard() {
                         type="text"
                         value={material.item}
                         onChange={(e) =>
-                          alterarItem(
-                            material.id,
-                            "item",
-                            e.target.value
-                          )
+                          alterarItem(material.id, "item", e.target.value)
                         }
                         placeholder="Ex: Cimento CP II"
                         className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
@@ -825,11 +878,7 @@ export default function Dashboard() {
                         type="number"
                         value={material.quantidade}
                         onChange={(e) =>
-                          alterarItem(
-                            material.id,
-                            "quantidade",
-                            e.target.value
-                          )
+                          alterarItem(material.id, "quantidade", e.target.value)
                         }
                         placeholder="0"
                         className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
@@ -842,11 +891,7 @@ export default function Dashboard() {
                       <select
                         value={material.unidade}
                         onChange={(e) =>
-                          alterarItem(
-                            material.id,
-                            "unidade",
-                            e.target.value
-                          )
+                          alterarItem(material.id, "unidade", e.target.value)
                         }
                         className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                       >
@@ -883,11 +928,7 @@ export default function Dashboard() {
                         type="text"
                         value={material.observacao}
                         onChange={(e) =>
-                          alterarItem(
-                            material.id,
-                            "observacao",
-                            e.target.value
-                          )
+                          alterarItem(material.id, "observacao", e.target.value)
                         }
                         placeholder="Detalhes do item"
                         className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
@@ -907,7 +948,8 @@ export default function Dashboard() {
             </div>
           </Panel>
         </div>
-                <div>
+
+        <div>
           <Panel title="Resumo da Demanda">
             <div className="mt-6 grid gap-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -1041,6 +1083,7 @@ export default function Dashboard() {
           </button>
         </div>
       </aside>
+
       <main className="ml-60 p-8">
         {telaAtual === "painel" && Painel}
 
