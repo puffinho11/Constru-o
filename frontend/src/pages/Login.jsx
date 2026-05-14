@@ -28,32 +28,59 @@ export default function Login() {
   }
 
   return (
-    <div className="login-page">
-      <form className="login-card" onSubmit={handleLogin}>
-        <h1>Credenciamento</h1>
-        <p>Acesse o sistema de materiais de construção</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-emerald-100 px-6">
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl border border-slate-100"
+      >
+        <div className="mb-7">
+          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-lg font-black text-white">
+            GC
+          </div>
 
-        {erro && <div className="erro">{erro}</div>}
+          <h1 className="text-3xl font-black text-emerald-950">
+            Credenciamento
+          </h1>
 
-        <label>
-          E-mail
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
+          <p className="mt-2 text-sm text-slate-500">
+            Acesse o sistema de materiais de construção
+          </p>
+        </div>
 
-        <label>
-          Senha
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
+        {erro && (
+          <div className="mb-5 rounded-2xl bg-red-100 px-4 py-3 text-sm font-black text-red-700">
+            {erro}
+          </div>
+        )}
 
-        <button type="submit">Entrar</button>
+        <div className="grid gap-5">
+          <label className="grid gap-2 text-sm font-black text-slate-700">
+            E-mail
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="rounded-2xl border border-slate-300 bg-white p-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+
+          <label className="grid gap-2 text-sm font-black text-slate-700">
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="rounded-2xl border border-slate-300 bg-white p-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="mt-2 rounded-2xl bg-emerald-600 p-4 text-sm font-black text-white shadow-xl shadow-emerald-200 transition hover:bg-emerald-700"
+          >
+            Entrar
+          </button>
+        </div>
       </form>
     </div>
   );

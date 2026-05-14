@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user"));
+
   const [telaAtual, setTelaAtual] = useState("painel");
+  const [secretarias, setSecretarias] = useState([]);
+  const [mostrarFormSecretaria, setMostrarFormSecretaria] = useState(false);
+  const [secretariaEditando, setSecretariaEditando] = useState(null);
 
   const menu = [
     ["painel", "Painel Inicial"],
@@ -19,6 +23,78 @@ export default function Dashboard() {
     ["arquivos", "Arquivos"],
   ];
 
+  async function carregarSecretarias() {
+    try {
+      const response = await fetch("http://localhost:5000/api/secretarias", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      const data = await response.json();
+      setSecretarias(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  useEffect(() => {
+    carregarSecretarias();
+  }, []);
+
+  async function salvarSecretaria(e) {
+    e.preventDefault();
+
+    const form = e.currentTarget;
+
+    const dados = {
+      nome: form.nome.value,
+      responsavel: form.responsavel.value,
+      email: form.email.value,
+      telefone: form.telefone.value,
+    };
+
+    try {
+      const url = secretariaEditando
+        ? `http://localhost:5000/api/secretarias/${secretariaEditando._id}`
+        : "http://localhost:5000/api/secretarias";
+
+      const method = secretariaEditando ? "PUT" : "POST";
+
+      await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(dados),
+      });
+
+      form.reset();
+      setSecretariaEditando(null);
+      setMostrarFormSecretaria(false);
+      carregarSecretarias();
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  function abrirCadastroSecretaria() {
+    setSecretariaEditando(null);
+    setMostrarFormSecretaria(true);
+  }
+
+  function editarSecretaria(secretaria) {
+    setSecretariaEditando(secretaria);
+    setMostrarFormSecretaria(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelarFormularioSecretaria() {
+    setSecretariaEditando(null);
+    setMostrarFormSecretaria(false);
+  }
+
   function sair() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -26,9 +102,9 @@ export default function Dashboard() {
   }
 
   const Card = ({ titulo, valor, texto, danger }) => (
-    <div className="relative overflow-hidden rounded-3xl bg-white p-6 shadow-xl border border-slate-100">
+    <div className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
       <div
-        className={`absolute -right-10 -bottom-10 h-28 w-28 rounded-full ${
+        className={`absolute -bottom-10 -right-10 h-28 w-28 rounded-full ${
           danger ? "bg-red-100" : "bg-emerald-100"
         }`}
       />
@@ -36,7 +112,7 @@ export default function Dashboard() {
       <span className="text-xs text-slate-500">{titulo}</span>
 
       <strong
-        className={`relative block mt-2 mb-2 text-4xl font-black ${
+        className={`relative mt-2 mb-2 block text-4xl font-black ${
           danger ? "text-red-600" : "text-emerald-950"
         }`}
       >
@@ -75,7 +151,7 @@ export default function Dashboard() {
   );
 
   const Panel = ({ title, children }) => (
-    <div className="rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
+    <div className="mb-7 rounded-3xl border border-slate-100 bg-white p-7 shadow-xl">
       <h2 className="text-2xl font-black text-emerald-950">{title}</h2>
       {children}
     </div>
@@ -93,30 +169,21 @@ export default function Dashboard() {
         />
 
         <div className="mb-7 grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-4">
-          <Card
-            titulo="Demandas abertas"
-            valor="0"
-            texto="Nenhuma demanda cadastrada"
-          />
+          <Card titulo="Demandas abertas" valor="0" texto="Nenhuma demanda cadastrada" />
 
           <Card
             titulo="Secretarias ativas"
-            valor="0"
-            texto="Nenhuma secretaria cadastrada"
+            valor={secretarias.length}
+            texto={
+              secretarias.length === 0
+                ? "Nenhuma secretaria cadastrada"
+                : "Secretarias cadastradas no sistema"
+            }
           />
 
-          <Card
-            titulo="Fornecedores"
-            valor="0"
-            texto="Nenhum fornecedor cadastrado"
-          />
+          <Card titulo="Fornecedores" valor="0" texto="Nenhum fornecedor cadastrado" />
 
-          <Card
-            titulo="Pendências"
-            valor="0"
-            texto="Nenhuma pendência no momento"
-            danger
-          />
+          <Card titulo="Pendências" valor="0" texto="Nenhuma pendência no momento" danger />
         </div>
 
         <div className="mb-7 grid grid-cols-1 gap-6 2xl:grid-cols-[1.45fr_1fr]">
@@ -133,27 +200,11 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
               {[
-                [
-                  "01",
-                  "Demanda",
-                  "Secretaria informa os materiais necessários.",
-                ],
+                ["01", "Demanda", "Secretaria informa os materiais necessários."],
                 ["02", "Orçamento", "Itens são organizados e conferidos."],
-                [
-                  "03",
-                  "Solicitação",
-                  "Envio para fornecedores credenciados.",
-                ],
-                [
-                  "04",
-                  "Propostas",
-                  "Recebimento e análise das cotações.",
-                ],
-                [
-                  "05",
-                  "Resultado",
-                  "Classificação e relatório final.",
-                ],
+                ["03", "Solicitação", "Envio para fornecedores credenciados."],
+                ["04", "Propostas", "Recebimento e análise das cotações."],
+                ["05", "Resultado", "Classificação e relatório final."],
               ].map(([n, t, d]) => (
                 <div
                   key={n}
@@ -163,9 +214,7 @@ export default function Dashboard() {
                     {n}
                   </div>
 
-                  <h3 className="text-base font-black text-emerald-950">
-                    {t}
-                  </h3>
+                  <h3 className="text-base font-black text-emerald-950">{t}</h3>
 
                   <p className="mt-2 text-xs leading-relaxed text-slate-500">
                     {d}
@@ -226,6 +275,189 @@ export default function Dashboard() {
     );
   }
 
+  function SecretariasPage() {
+    return (
+      <>
+        <Header
+          tag="Gestão interna"
+          title="Secretarias Participantes"
+          desc="Cadastro e acompanhamento das secretarias autorizadas a abrir demandas."
+          button="Cadastrar Secretaria"
+          onClick={abrirCadastroSecretaria}
+        />
+
+        {mostrarFormSecretaria && (
+          <Panel
+            title={
+              secretariaEditando
+                ? "Editar Secretaria"
+                : "Nova Secretaria"
+            }
+          >
+            <form
+              key={secretariaEditando?._id || "nova-secretaria"}
+              onSubmit={salvarSecretaria}
+              className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2"
+            >
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Nome da Secretaria
+                <input
+                  name="nome"
+                  type="text"
+                  defaultValue={secretariaEditando?.nome || ""}
+                  className="rounded-2xl border border-slate-300 p-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                  placeholder="Ex: Secretaria de Obras"
+                  required
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Responsável
+                <input
+                  name="responsavel"
+                  type="text"
+                  defaultValue={secretariaEditando?.responsavel || ""}
+                  className="rounded-2xl border border-slate-300 p-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                  placeholder="Nome do responsável"
+                  required
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                E-mail
+                <input
+                  name="email"
+                  type="email"
+                  defaultValue={secretariaEditando?.email || ""}
+                  className="rounded-2xl border border-slate-300 p-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                  placeholder="email@prefeitura.pr.gov.br"
+                  required
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Telefone
+                <input
+                  name="telefone"
+                  type="text"
+                  defaultValue={secretariaEditando?.telefone || ""}
+                  className="rounded-2xl border border-slate-300 p-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                  placeholder="(42) 99999-9999"
+                />
+              </label>
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-2xl bg-emerald-600 p-4 text-sm font-black text-white transition hover:bg-emerald-700"
+                >
+                  {secretariaEditando ? "Salvar Alterações" : "Salvar Secretaria"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={cancelarFormularioSecretaria}
+                  className="rounded-2xl bg-slate-200 px-6 py-4 text-sm font-black text-slate-700 transition hover:bg-slate-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </Panel>
+        )}
+
+        <Panel title="Secretarias Cadastradas">
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full border-collapse">
+              <thead className="bg-emerald-50">
+                <tr>
+                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
+                    Secretaria
+                  </th>
+
+                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
+                    Responsável
+                  </th>
+
+                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
+                    E-mail
+                  </th>
+
+                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
+                    Telefone
+                  </th>
+
+                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-4 text-center text-xs font-black uppercase text-emerald-950">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {secretarias.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="px-5 py-8 text-center text-sm text-slate-400"
+                    >
+                      Nenhuma secretaria cadastrada.
+                    </td>
+                  </tr>
+                ) : (
+                  secretarias.map((secretaria) => (
+                    <tr
+                      key={secretaria._id}
+                      className="border-t border-slate-100 hover:bg-slate-50"
+                    >
+                      <td className="px-5 py-5 text-sm font-bold text-slate-700">
+                        {secretaria.nome}
+                      </td>
+
+                      <td className="px-5 py-5 text-sm text-slate-600">
+                        {secretaria.responsavel}
+                      </td>
+
+                      <td className="px-5 py-5 text-sm text-slate-600">
+                        {secretaria.email}
+                      </td>
+
+                      <td className="px-5 py-5 text-sm text-slate-600">
+                        {secretaria.telefone || "-"}
+                      </td>
+
+                      <td className="px-5 py-5">
+                        <span className="rounded-full bg-emerald-100 px-3 py-2 text-[10px] font-black text-emerald-700">
+                          Ativa
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-5">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => editarSecretaria(secretaria)}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-lg text-blue-700 transition hover:bg-blue-200"
+                            title="Editar secretaria"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      </>
+    );
+  }
+
   function TelaPadrao({ titulo, tag, descricao }) {
     return (
       <>
@@ -241,36 +473,6 @@ export default function Dashboard() {
             Quando houver informações cadastradas no sistema, elas aparecerão
             aqui automaticamente.
           </p>
-
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="w-full border-collapse">
-              <thead className="bg-emerald-50">
-                <tr>
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
-                    Informações
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-black uppercase text-emerald-950">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr>
-                  <td className="px-5 py-6 text-sm text-slate-500">
-                    Nenhum dado encontrado
-                  </td>
-
-                  <td className="px-5 py-6">
-                    <span className="rounded-full bg-yellow-100 px-3 py-2 text-[10px] font-black text-yellow-700">
-                      Aguardando cadastro
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </Panel>
       </>
     );
@@ -332,13 +534,7 @@ export default function Dashboard() {
       <main className="ml-60 p-8">
         {telaAtual === "painel" && <Painel />}
 
-        {telaAtual === "secretarias" && (
-          <TelaPadrao
-            titulo="Secretarias Participantes"
-            tag="Gestão interna"
-            descricao="Cadastro e acompanhamento das secretarias autorizadas a abrir demandas."
-          />
-        )}
+        {telaAtual === "secretarias" && <SecretariasPage />}
 
         {telaAtual === "demanda" && (
           <TelaPadrao

@@ -6,8 +6,10 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import secretariaRoutes from "./routes/secretariaRoutes.js";
 
 import authRoutes from "./routes/authRoutes.js";
+
 
 dotenv.config();
 
@@ -36,6 +38,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 app.use("/api/auth", authRoutes);
+app.use("/api/secretarias", secretariaRoutes);
 
 mongoose
   .connect(process.env.MONGO_URI)
