@@ -51,6 +51,12 @@ export default function Dashboard() {
   const [telaAtual, setTelaAtual] = useState("painel")
   const [secretarias, setSecretarias] = useState([])
   const [demandas, setDemandas] = useState([])
+  const [fornecedores, setFornecedores] = useState([])
+  const [mostrarFormFornecedor, setMostrarFormFornecedor] = useState(false)
+  const [fornecedorEditando, setFornecedorEditando] = useState(null)
+  const [buscaFornecedor, setBuscaFornecedor] = useState("")
+  const [demandaOrcamentoId, setDemandaOrcamentoId] = useState("")
+  const [valoresOrcamento, setValoresOrcamento] = useState({})
   const [mostrarFormSecretaria, setMostrarFormSecretaria] = useState(false)
   const [secretariaEditando, setSecretariaEditando] = useState(null)
 
@@ -89,6 +95,7 @@ export default function Dashboard() {
   useEffect(() => {
     carregarSecretarias()
     carregarDemandas()
+    carregarFornecedores()
   }, [])
 
   async function carregarSecretarias() {
@@ -118,6 +125,22 @@ export default function Dashboard() {
       const data = await response.json()
 
       setDemandas(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.log(error)
+    }
+  }
+
+  async function carregarFornecedores() {
+    try {
+      const response = await fetch("http://localhost:5000/api/fornecedores", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+
+      const data = await response.json()
+
+      setFornecedores(Array.isArray(data) ? data : [])
     } catch (error) {
       console.log(error)
     }
@@ -313,6 +336,108 @@ export default function Dashboard() {
       alert("Erro ao excluir demanda")
     }
   }
+
+  async function salvarFornecedor(e) {
+    e.preventDefault()
+
+    const form = e.target
+
+    const dados = {
+      empresa: form.empresa.value,
+      cnpj: form.cnpj.value,
+      responsavel: form.responsavel.value,
+      email: form.email.value,
+      telefone: form.telefone.value,
+      cidade: form.cidade.value,
+      materiais: form.materiais.value,
+      status: form.status.value,
+    }
+
+    try {
+      const url = fornecedorEditando
+        ? `http://localhost:5000/api/fornecedores/${fornecedorEditando._id}`
+        : "http://localhost:5000/api/fornecedores"
+
+      const method = fornecedorEditando ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(dados),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        alert(data.erro || "Erro ao salvar fornecedor")
+        return
+      }
+
+      await carregarFornecedores()
+
+      setFornecedorEditando(null)
+      setMostrarFormFornecedor(false)
+    } catch (error) {
+      console.log(error)
+      alert("Erro ao salvar fornecedor")
+    }
+  }
+
+  function editarFornecedor(fornecedor) {
+    setFornecedorEditando(fornecedor)
+    setMostrarFormFornecedor(true)
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    })
+  }
+
+  function cancelarFormularioFornecedor() {
+    setFornecedorEditando(null)
+    setMostrarFormFornecedor(false)
+  }
+
+  async function excluirFornecedor(id) {
+    const confirmar = confirm("Deseja realmente excluir este fornecedor?")
+
+    if (!confirmar) {
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/fornecedores/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Erro ao excluir fornecedor")
+      }
+
+      await carregarFornecedores()
+    } catch (error) {
+      console.log(error)
+      alert("Erro ao excluir fornecedor")
+    }
+  }
+
+  const fornecedoresFiltrados = fornecedores.filter((fornecedor) => {
+    const termo = buscaFornecedor.toLowerCase()
+
+    return (
+      (fornecedor.empresa || "").toLowerCase().includes(termo) ||
+      (fornecedor.cnpj || "").toLowerCase().includes(termo) ||
+      (fornecedor.responsavel || "").toLowerCase().includes(termo) ||
+      (fornecedor.materiais || "").toLowerCase().includes(termo)
+    )
+  })
+
 
   function sair() {
     localStorage.removeItem("token")
@@ -1027,6 +1152,641 @@ export default function Dashboard() {
     </>
   )
 
+
+  const demandaSelecionadaOrcamento =
+    demandas.find((item) => item._id === demandaOrcamentoId) || null
+
+  const materiaisOrcamento = demandaSelecionadaOrcamento?.materiais || []
+
+  function atualizarValorOrcamento(index, valor) {
+    setValoresOrcamento((old) => ({
+      ...old,
+      [index]: valor,
+    }))
+  }
+
+  function formatarMoeda(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    })
+  }
+
+  function calcularTotalItem(item, index) {
+    const quantidade = Number(item.quantidade || 0)
+    const valorUnitario = Number(valoresOrcamento[index] || 0)
+
+    return quantidade * valorUnitario
+  }
+
+  const totalOrcamento = materiaisOrcamento.reduce((total, item, index) => {
+    return total + calcularTotalItem(item, index)
+  }, 0)
+
+  async function salvarOrcamento() {
+    if (!demandaSelecionadaOrcamento) {
+      alert("Selecione uma demanda para montar o orçamento")
+      return
+    }
+
+    try {
+      const itens = materiaisOrcamento.map((item, index) => {
+        const valorUnitario = Number(valoresOrcamento[index] || 0)
+
+        return {
+          material: item.item,
+          quantidade: Number(item.quantidade || 0),
+          unidade: item.unidade,
+          valorUnitario,
+          valorTotal: Number(item.quantidade || 0) * valorUnitario,
+        }
+      })
+
+      const response = await fetch("http://localhost:5000/api/orcamentos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          demanda: demandaSelecionadaOrcamento._id,
+          numeroDemanda: demandaSelecionadaOrcamento.numeroDemanda,
+          secretaria: demandaSelecionadaOrcamento.secretaria,
+          itens,
+          valorTotalEstimado: totalOrcamento,
+          status: "Finalizado",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        alert(data.erro || "Erro ao salvar orçamento")
+        return
+      }
+
+      alert("Orçamento salvo com sucesso")
+      setDemandaOrcamentoId("")
+      setValoresOrcamento({})
+    } catch (error) {
+      console.log(error)
+      alert("Erro ao salvar orçamento")
+    }
+  }
+
+  const OrcamentoPage = (
+    <>
+      <Header
+        tag="Itens e valores"
+        title="Orçamento da Secretaria"
+        desc="Selecione uma demanda cadastrada, confira os materiais solicitados e lance os valores unitários para formar o orçamento estimado."
+        button="Salvar Orçamento"
+        onClick={salvarOrcamento}
+      />
+
+      <div className="mb-7 grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
+          <span className="text-xs text-slate-500">
+            Demandas disponíveis
+          </span>
+
+          <strong className="mt-2 block text-4xl font-black text-emerald-950">
+            {demandas.length}
+          </strong>
+
+          <small className="text-xs text-slate-400">
+            Demandas cadastradas para orçamento
+          </small>
+        </div>
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
+          <span className="text-xs text-slate-500">
+            Itens da demanda
+          </span>
+
+          <strong className="mt-2 block text-4xl font-black text-emerald-950">
+            {materiaisOrcamento.length}
+          </strong>
+
+          <small className="text-xs text-slate-400">
+            Materiais selecionados
+          </small>
+        </div>
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
+          <span className="text-xs text-slate-500">
+            Total estimado
+          </span>
+
+          <strong className="mt-2 block text-4xl font-black text-emerald-700">
+            {formatarMoeda(totalOrcamento)}
+          </strong>
+
+          <small className="text-xs text-slate-400">
+            Soma dos valores lançados
+          </small>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.4fr_.8fr]">
+        <div>
+          <Panel title="Selecionar Demanda">
+            <div className="mt-6 grid gap-5">
+              <label className="grid gap-2 text-sm font-black text-slate-700">
+                Demanda
+
+                <select
+                  value={demandaOrcamentoId}
+                  onChange={(e) => {
+                    setDemandaOrcamentoId(e.target.value)
+                    setValoresOrcamento({})
+                  }}
+                  className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                >
+                  <option value="">
+                    Selecione uma demanda cadastrada
+                  </option>
+
+                  {demandas.map((item) => (
+                    <option key={item._id} value={item._id}>
+                      {item.numeroDemanda} - {item.objeto}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {!demandaSelecionadaOrcamento && (
+                <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5">
+                  <strong className="text-sm font-black text-yellow-700">
+                    Nenhuma demanda selecionada
+                  </strong>
+
+                  <p className="mt-2 text-sm text-slate-600">
+                    Para montar o orçamento, primeiro cadastre uma demanda na tela
+                    “Nova Demanda” e depois selecione ela aqui.
+                  </p>
+                </div>
+              )}
+
+              {demandaSelecionadaOrcamento && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                  <strong className="text-sm font-black text-emerald-700">
+                    Demanda {demandaSelecionadaOrcamento.numeroDemanda}
+                  </strong>
+
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
+                    {demandaSelecionadaOrcamento.objeto}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Secretaria: {demandaSelecionadaOrcamento.secretaria || "Não informada"}
+                  </p>
+                </div>
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Itens para Orçamento">
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full border-collapse">
+                <thead className="bg-emerald-50">
+                  <tr>
+                    <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                      Material
+                    </th>
+
+                    <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                      Quantidade
+                    </th>
+
+                    <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                      Unidade
+                    </th>
+
+                    <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                      Valor Unitário
+                    </th>
+
+                    <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {materiaisOrcamento.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan="5"
+                        className="px-5 py-10 text-center text-sm text-slate-400"
+                      >
+                        Nenhum item disponível para orçamento.
+                      </td>
+                    </tr>
+                  ) : (
+                    materiaisOrcamento.map((item, index) => (
+                      <tr
+                        key={`${item.item}-${index}`}
+                        className="border-t border-slate-100"
+                      >
+                        <td className="px-5 py-5 text-sm font-bold text-slate-700">
+                          {item.item}
+                          {item.observacao && (
+                            <p className="mt-1 text-xs font-normal text-slate-400">
+                              {item.observacao}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-5 text-sm text-slate-600">
+                          {item.quantidade}
+                        </td>
+
+                        <td className="px-5 py-5 text-sm text-slate-600">
+                          {item.unidade}
+                        </td>
+
+                        <td className="px-5 py-5">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={valoresOrcamento[index] || ""}
+                            onChange={(e) =>
+                              atualizarValorOrcamento(index, e.target.value)
+                            }
+                            className="w-36 rounded-2xl border border-slate-300 p-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                            placeholder="0,00"
+                          />
+                        </td>
+
+                        <td className="px-5 py-5 text-sm font-black text-emerald-700">
+                          {formatarMoeda(calcularTotalItem(item, index))}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+
+        <div>
+          <Panel title="Resumo do Orçamento">
+            <div className="mt-6 grid gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <span className="text-xs text-slate-500">
+                  Demanda selecionada
+                </span>
+
+                <strong className="mt-2 block text-lg font-black text-emerald-950">
+                  {demandaSelecionadaOrcamento?.numeroDemanda || "Nenhuma"}
+                </strong>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <span className="text-xs text-slate-500">
+                  Itens com valor
+                </span>
+
+                <strong className="mt-2 block text-3xl font-black text-emerald-950">
+                  {
+                    materiaisOrcamento.filter((_, index) =>
+                      Number(valoresOrcamento[index] || 0) > 0
+                    ).length
+                  }
+                </strong>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <span className="text-xs font-black text-emerald-700">
+                  Valor Total Estimado
+                </span>
+
+                <strong className="mt-2 block text-4xl font-black text-emerald-700">
+                  {formatarMoeda(totalOrcamento)}
+                </strong>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <span className="text-xs font-black text-slate-600">
+                  Próxima etapa
+                </span>
+
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Depois de preencher os valores, o orçamento poderá ser usado
+                  como referência para solicitar cotações aos fornecedores.
+                </p>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </>
+  )
+
+  const FornecedoresPage = (
+    <>
+      <Header
+        tag="Cadastro externo"
+        title="Fornecedores Credenciados"
+        desc="Cadastro e controle das empresas aptas a receber solicitações de orçamento."
+        button="Cadastrar Fornecedor"
+        onClick={() => {
+          setFornecedorEditando(null)
+          setMostrarFormFornecedor(true)
+        }}
+      />
+
+      <div className="mb-7 grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
+          <span className="text-xs text-slate-500">
+            Total de fornecedores
+          </span>
+
+          <strong className="mt-2 block text-4xl font-black text-emerald-950">
+            {fornecedores.length}
+          </strong>
+        </div>
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
+          <span className="text-xs text-slate-500">
+            Fornecedores ativos
+          </span>
+
+          <strong className="mt-2 block text-4xl font-black text-emerald-950">
+            {fornecedores.filter((item) => item.status === "Ativo").length}
+          </strong>
+        </div>
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
+          <span className="text-xs text-slate-500">
+            Pendentes/Inativos
+          </span>
+
+          <strong className="mt-2 block text-4xl font-black text-red-600">
+            {fornecedores.filter((item) => item.status !== "Ativo").length}
+          </strong>
+        </div>
+      </div>
+
+      {mostrarFormFornecedor && (
+        <Panel
+          title={
+            fornecedorEditando
+              ? "Editar Fornecedor"
+              : "Novo Fornecedor"
+          }
+        >
+          <form
+            key={fornecedorEditando?._id || "novo-fornecedor"}
+            onSubmit={salvarFornecedor}
+            className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2"
+          >
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Empresa
+              <input
+                name="empresa"
+                type="text"
+                defaultValue={fornecedorEditando?.empresa || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="Nome da empresa"
+                required
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              CNPJ
+              <input
+                name="cnpj"
+                type="text"
+                defaultValue={fornecedorEditando?.cnpj || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="00.000.000/0000-00"
+                required
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Responsável
+              <input
+                name="responsavel"
+                type="text"
+                defaultValue={fornecedorEditando?.responsavel || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="Nome do responsável"
+                required
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              E-mail
+              <input
+                name="email"
+                type="email"
+                defaultValue={fornecedorEditando?.email || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="empresa@email.com"
+                required
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Telefone
+              <input
+                name="telefone"
+                type="text"
+                defaultValue={fornecedorEditando?.telefone || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="(42) 99999-9999"
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Cidade
+              <input
+                name="cidade"
+                type="text"
+                defaultValue={fornecedorEditando?.cidade || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="Cidade/UF"
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Materiais que fornece
+              <input
+                name="materiais"
+                type="text"
+                defaultValue={fornecedorEditando?.materiais || ""}
+                className="rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                placeholder="Ex: cimento, areia, brita, tubos..."
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Status
+              <select
+                name="status"
+                defaultValue={fornecedorEditando?.status || "Ativo"}
+                className="rounded-2xl border border-slate-300 bg-white p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+              >
+                <option>Ativo</option>
+                <option>Inativo</option>
+                <option>Pendente</option>
+              </select>
+            </label>
+
+            <div className="flex gap-3 md:col-span-2">
+              <button
+                type="submit"
+                className="flex-1 rounded-2xl bg-emerald-600 p-4 text-sm font-black text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700"
+              >
+                {fornecedorEditando
+                  ? "Salvar Alterações"
+                  : "Salvar Fornecedor"}
+              </button>
+
+              <button
+                type="button"
+                onClick={cancelarFormularioFornecedor}
+                className="rounded-2xl bg-slate-200 px-6 py-4 text-sm font-black text-slate-700 transition hover:bg-slate-300"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </Panel>
+      )}
+
+      <Panel title="Fornecedores Cadastrados">
+        <div className="mt-6 mb-5">
+          <input
+            type="text"
+            value={buscaFornecedor}
+            onChange={(e) => setBuscaFornecedor(e.target.value)}
+            className="w-full rounded-2xl border border-slate-300 p-4 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+            placeholder="Buscar por empresa, CNPJ, responsável ou material..."
+          />
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="w-full border-collapse">
+            <thead className="bg-emerald-50">
+              <tr>
+                <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                  Empresa
+                </th>
+
+                <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                  CNPJ
+                </th>
+
+                <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                  Responsável
+                </th>
+
+                <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                  Contato
+                </th>
+
+                <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                  Materiais
+                </th>
+
+                <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-wide text-emerald-950">
+                  Status
+                </th>
+
+                <th className="px-5 py-4 text-center text-xs font-black uppercase tracking-wide text-emerald-950">
+                  Ações
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {fornecedoresFiltrados.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="px-5 py-10 text-center text-sm text-slate-400"
+                  >
+                    Nenhum fornecedor cadastrado.
+                  </td>
+                </tr>
+              ) : (
+                fornecedoresFiltrados.map((fornecedor) => (
+                  <tr
+                    key={fornecedor._id}
+                    className="border-t border-slate-100 transition hover:bg-slate-50"
+                  >
+                    <td className="px-5 py-5 text-sm font-bold text-slate-700">
+                      {fornecedor.empresa}
+                    </td>
+
+                    <td className="px-5 py-5 text-sm text-slate-600">
+                      {fornecedor.cnpj}
+                    </td>
+
+                    <td className="px-5 py-5 text-sm text-slate-600">
+                      {fornecedor.responsavel}
+                    </td>
+
+                    <td className="px-5 py-5 text-sm text-slate-600">
+                      <p>{fornecedor.email}</p>
+                      <p className="text-xs text-slate-400">
+                        {fornecedor.telefone || "-"} · {fornecedor.cidade || "-"}
+                      </p>
+                    </td>
+
+                    <td className="px-5 py-5 text-sm text-slate-600">
+                      {fornecedor.materiais || "-"}
+                    </td>
+
+                    <td className="px-5 py-5">
+                      <span
+                        className={`rounded-full px-3 py-2 text-[10px] font-black ${
+                          fornecedor.status === "Ativo"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : fornecedor.status === "Pendente"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {fornecedor.status}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-5">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => editarFornecedor(fornecedor)}
+                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-lg text-blue-700 transition hover:bg-blue-200"
+                        >
+                          ✏️
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => excluirFornecedor(fornecedor._id)}
+                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-lg font-black text-red-700 transition hover:bg-red-200"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </>
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-100 text-slate-900">
       <aside className="fixed left-0 top-0 z-20 flex h-screen w-60 flex-col justify-between overflow-y-auto bg-gradient-to-b from-emerald-950 to-emerald-700 p-5 text-white shadow-2xl">
@@ -1091,13 +1851,7 @@ export default function Dashboard() {
 
         {telaAtual === "demanda" && NovaDemandaPage}
 
-        {telaAtual === "orcamento" && (
-          <Panel title="Orçamento">
-            <p className="mt-4 text-sm text-slate-500">
-              Tela de orçamento em desenvolvimento.
-            </p>
-          </Panel>
-        )}
+        {telaAtual === "orcamento" && OrcamentoPage}
 
         {telaAtual === "solicitacao" && (
           <Panel title="Solicitação">
@@ -1107,13 +1861,7 @@ export default function Dashboard() {
           </Panel>
         )}
 
-        {telaAtual === "fornecedores" && (
-          <Panel title="Fornecedores">
-            <p className="mt-4 text-sm text-slate-500">
-              Tela de fornecedores em desenvolvimento.
-            </p>
-          </Panel>
-        )}
+        {telaAtual === "fornecedores" && FornecedoresPage}
 
         {telaAtual === "propostas" && (
           <Panel title="Propostas">
