@@ -1,60 +1,111 @@
-import express from "express";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import cors from "cors";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
-import morgan from "morgan";
-import cookieParser from "cookie-parser";
-import secretariaRoutes from "./routes/secretariaRoutes.js";
+import express from "express"
+import mongoose from "mongoose"
+import dotenv from "dotenv"
+import cors from "cors"
+import helmet from "helmet"
+import rateLimit from "express-rate-limit"
+import morgan from "morgan"
+import cookieParser from "cookie-parser"
+
+import authRoutes from "./routes/authRoutes.js"
+import secretariaRoutes from "./routes/secretariaRoutes.js"
 import demandaRoutes from "./routes/demandaRoutes.js"
 import fornecedorRoutes from "./routes/fornecedorRoutes.js"
 import orcamentoRoutes from "./routes/orcamentoRoutes.js"
 
-import authRoutes from "./routes/authRoutes.js";
+import cotacaoRoutes from "./routes/cotacaoRoutes.js"
+import propostaRoutes from "./routes/propostaRoutes.js"
+import arquivoRoutes from "./routes/arquivoRoutes.js"
 
+import { verificarConexaoEmail } from "./services/emailService.js"
+import { finalizarCotacoesExpiradas } from "./services/cotacaoService.js"
 
-dotenv.config();
+dotenv.config()
 
-const app = express();
+const app = express()
 
-app.use(express.json({ limit: "10mb" }));
-app.use(cookieParser());
+app.use(express.json({ limit: "10mb" }))
+app.use(cookieParser())
 
 app.use(
   cors({
-    origin: process.env.FRONT_URL,
+    origin: process.env.FRONT_URL || "http://localhost:5173",
     credentials: true,
   })
-);
+)
 
-app.use(helmet());
-
-app.use(morgan("dev"));
+app.use(helmet())
+app.use(morgan("dev"))
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
   message: "Muitas requisições. Tente novamente mais tarde.",
-});
+})
 
-app.use(limiter);
+app.use(limiter)
 
-app.use("/api/auth", authRoutes);
-app.use("/api/secretarias", secretariaRoutes);
+app.get("/", (req, res) => {
+  res.json({
+    mensagem: "API do Sistema de Compras funcionando.",
+  })
+})
+
+app.use("/api/auth", authRoutes)
+app.use("/api/secretarias", secretariaRoutes)
 app.use("/api/demandas", demandaRoutes)
 app.use("/api/fornecedores", fornecedorRoutes)
 app.use("/api/orcamentos", orcamentoRoutes)
 
+app.use("/api/cotacoes", cotacaoRoutes)
+app.use("/api/propostas", propostaRoutes)
+app.use("/api/arquivos", arquivoRoutes)
+
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("MongoDB conectado");
+  .then(async () => {
+    console.log("MongoDB conectado")
 
-    app.listen(process.env.PORT, () => {
-      console.log(`Servidor rodando na porta ${process.env.PORT}`);
-    });
+    try {
+      await verificarConexaoEmail()
+    } catch (error) {
+      console.error("Erro ao verificar servidor de e-mail:", error.message)
+    }
+
+    try {
+      const total = await finalizarCotacoesExpiradas()
+
+      if (total > 0) {
+        console.log(`${total} cotação(ões) expirada(s) finalizada(s).`)
+      }
+    } catch (error) {
+      console.error(
+        "Erro ao finalizar cotações expiradas:",
+        error.message
+      )
+    }
+
+    setInterval(async () => {
+      try {
+        const total = await finalizarCotacoesExpiradas()
+
+        if (total > 0) {
+          console.log(`${total} cotação(ões) expirada(s) finalizada(s).`)
+        }
+      } catch (error) {
+        console.error(
+          "Erro na verificação automática das cotações:",
+          error.message
+        )
+      }
+    }, 60 * 1000)
+
+    const port = process.env.PORT || 5000
+
+    app.listen(port, () => {
+      console.log(`Servidor rodando na porta ${port}`)
+    })
   })
-  .catch((err) => {
-    console.log(err);
-  });
+  .catch((error) => {
+    console.error("Erro ao conectar no MongoDB:", error)
+  })

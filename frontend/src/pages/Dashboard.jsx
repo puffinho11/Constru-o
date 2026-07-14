@@ -297,6 +297,7 @@ export default function Dashboard() {
   const [fornecedores, setFornecedores] = useState([])
 
   const [solicitacoes, setSolicitacoes] = useState([])
+  const [cotacoes, setCotacoes] = useState([])
   const [propostas, setPropostas] = useState([])
   const [arquivos, setArquivos] = useState([])
 
@@ -318,6 +319,16 @@ export default function Dashboard() {
     demandaId: "",
     fornecedorId: "",
     prazo: "",
+    observacao: "",
+  })
+
+  const [mostrarFormCotacao, setMostrarFormCotacao] = useState(false)
+  const [cotacaoSelecionada, setCotacaoSelecionada] = useState(null)
+  const [mostrarDetalhesCotacao, setMostrarDetalhesCotacao] = useState(false)
+  const [novaCotacao, setNovaCotacao] = useState({
+    demandaId: "",
+    fornecedorIds: [],
+    prazoHoras: 24,
     observacao: "",
   })
 
@@ -362,7 +373,7 @@ export default function Dashboard() {
     { id: "secretarias", nome: "Secretarias", icon: Building2 },
     { id: "demanda", nome: "Nova Demanda", icon: FilePlus2 },
     { id: "orcamento", nome: "Orçamentos", icon: Calculator },
-    { id: "solicitacao", nome: "Solicitações", icon: Send },
+    { id: "solicitacao", nome: "Cotações", icon: Send },
     { id: "fornecedores", nome: "Fornecedores", icon: Truck },
     { id: "propostas", nome: "Propostas", icon: ClipboardList },
     { id: "julgamento", nome: "Julgamento", icon: Scale },
@@ -381,6 +392,7 @@ export default function Dashboard() {
       carregarSecretarias(),
       carregarDemandas(),
       carregarFornecedores(),
+      carregarCotacoes(),
     ])
 
     setCarregando(false)
@@ -419,6 +431,186 @@ export default function Dashboard() {
       setFornecedores(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error(error)
+    }
+  }
+
+  async function carregarCotacoes() {
+    try {
+      const response = await fetch(`${API_URL}/cotacoes`, {
+        headers: authHeaders(),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar cotações.")
+      }
+
+      setCotacoes(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error("Erro ao carregar cotações:", error)
+      setCotacoes([])
+    }
+  }
+
+  function alternarFornecedorCotacao(fornecedorId) {
+    setNovaCotacao((atual) => {
+      const selecionado = atual.fornecedorIds.includes(fornecedorId)
+
+      return {
+        ...atual,
+        fornecedorIds: selecionado
+          ? atual.fornecedorIds.filter((id) => id !== fornecedorId)
+          : [...atual.fornecedorIds, fornecedorId],
+      }
+    })
+  }
+
+  function selecionarTodosFornecedoresCotacao() {
+    const idsAtivos = fornecedores
+      .filter((item) => item.status === "Ativo" && item.email)
+      .map((item) => item._id)
+
+    setNovaCotacao((atual) => ({
+      ...atual,
+      fornecedorIds:
+        atual.fornecedorIds.length === idsAtivos.length ? [] : idsAtivos,
+    }))
+  }
+
+  async function salvarCotacao(event) {
+    event.preventDefault()
+
+    if (!novaCotacao.demandaId) {
+      alert("Selecione uma demanda.")
+      return
+    }
+
+    if (novaCotacao.fornecedorIds.length === 0) {
+      alert("Selecione pelo menos um fornecedor.")
+      return
+    }
+
+    const horas = Number(novaCotacao.prazoHoras)
+
+    if (!Number.isFinite(horas) || horas < 1 || horas > 720) {
+      alert("Informe um prazo entre 1 e 720 horas.")
+      return
+    }
+
+    setCarregando(true)
+
+    try {
+      const response = await fetch(`${API_URL}/cotacoes`, {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify({
+          demandaId: novaCotacao.demandaId,
+          fornecedorIds: novaCotacao.fornecedorIds,
+          prazoHoras: horas,
+          observacao: novaCotacao.observacao,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao criar cotação.")
+      }
+
+      alert(data.mensagem || "Cotação criada e enviada com sucesso.")
+
+      setNovaCotacao({
+        demandaId: "",
+        fornecedorIds: [],
+        prazoHoras: 24,
+        observacao: "",
+      })
+      setMostrarFormCotacao(false)
+
+      await carregarCotacoes()
+    } catch (error) {
+      console.error(error)
+      alert(error.message || "Erro ao criar cotação.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function executarAcaoCotacao(cotacaoId, acao) {
+    const mensagens = {
+      reenviar: "Deseja reenviar os e-mails desta cotação?",
+      encerrar:
+        "Deseja encerrar a cotação agora e calcular automaticamente o menor valor?",
+      cancelar: "Deseja cancelar esta cotação?",
+    }
+
+    if (mensagens[acao] && !confirm(mensagens[acao])) {
+      return
+    }
+
+    setCarregando(true)
+
+    try {
+      const method = acao === "cancelar" ? "PATCH" : "POST"
+
+      const response = await fetch(
+        `${API_URL}/cotacoes/${cotacaoId}/${acao}`,
+        {
+          method,
+          headers: authHeaders(true),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao executar a ação.")
+      }
+
+      alert(data.mensagem || "Ação realizada com sucesso.")
+      await carregarCotacoes()
+    } catch (error) {
+      console.error(error)
+      alert(error.message || "Erro ao executar a ação.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function abrirDetalhesCotacao(cotacaoId) {
+    setCarregando(true)
+
+    try {
+      const response = await fetch(`${API_URL}/cotacoes/${cotacaoId}`, {
+        headers: authHeaders(),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar os detalhes.")
+      }
+
+      setCotacaoSelecionada(data)
+      setMostrarDetalhesCotacao(true)
+    } catch (error) {
+      console.error(error)
+      alert(error.message || "Erro ao carregar os detalhes da cotação.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function copiarLinkCotacao(token) {
+    const link = `${window.location.origin}/cotacao/${token}`
+
+    try {
+      await navigator.clipboard.writeText(link)
+      alert("Link copiado.")
+    } catch (error) {
+      console.error(error)
+      window.prompt("Copie o link abaixo:", link)
     }
   }
 
@@ -891,9 +1083,9 @@ export default function Dashboard() {
           tone="blue"
         />
         <MetricCard
-          title="Solicitações enviadas"
-          value={solicitacoes.length}
-          description="Pedidos enviados aos fornecedores"
+          title="Cotações enviadas"
+          value={cotacoes.length}
+          description="Cotações enviadas aos fornecedores"
           icon={Send}
           tone="violet"
         />
@@ -1586,7 +1778,7 @@ export default function Dashboard() {
                       <th className="px-5 py-3.5">Unidade</th>
                       <th className="px-5 py-3.5">Valor unitário</th>
                       <th className="px-5 py-3.5">Total</th>
-                    </tr>
+                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {materiaisOrcamento.map((item, index) => {
@@ -1695,120 +1887,239 @@ export default function Dashboard() {
   const SolicitacoesPage = (
     <>
       <PageHeader
-        eyebrow="Cotação com fornecedores"
-        title="Solicitações de orçamento"
-        description="Envie pedidos de cotação aos fornecedores credenciados e acompanhe os prazos."
-        actionLabel="Nova solicitação"
-        onAction={() => setMostrarFormSolicitacao(true)}
+        eyebrow="Cotação eletrônica"
+        title="Cotações com fornecedores"
+        description="Selecione uma demanda, convide vários fornecedores e defina o prazo máximo para o envio das propostas."
+        actionLabel="Nova cotação"
+        onAction={() => setMostrarFormCotacao(true)}
+        secondaryAction={
+          <button
+            type="button"
+            onClick={carregarCotacoes}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw size={17} />
+            Atualizar
+          </button>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Solicitações enviadas"
-          value={solicitacoes.length}
-          description="Total de pedidos criados"
+          title="Cotações cadastradas"
+          value={cotacoes.length}
+          description="Total de processos criados"
           icon={Send}
           tone="blue"
         />
+
         <MetricCard
-          title="Aguardando resposta"
-          value={solicitacoes.filter((item) => item.status === "Enviado").length}
-          description="Fornecedores ainda não responderam"
+          title="Cotações abertas"
+          value={cotacoes.filter((item) => item.status === "Aberta").length}
+          description="Ainda recebendo propostas"
           icon={Clock3}
           tone="amber"
         />
+
         <MetricCard
-          title="Com proposta"
-          value={new Set(propostas.map((item) => item.solicitacaoId)).size}
-          description="Solicitações que receberam cotação"
-          icon={CheckCircle2}
+          title="Fornecedores convidados"
+          value={cotacoes.reduce(
+            (total, item) => total + (item.participantes?.length || 0),
+            0
+          )}
+          description="Convites enviados por e-mail"
+          icon={Users}
+          tone="violet"
+        />
+
+        <MetricCard
+          title="Cotações finalizadas"
+          value={cotacoes.filter((item) => item.status === "Finalizada").length}
+          description="Com resultado calculado"
+          icon={Trophy}
           tone="emerald"
         />
       </div>
 
-      {mostrarFormSolicitacao && (
+      {mostrarFormCotacao && (
         <Card className="mt-6">
           <CardHeader
-            title="Nova solicitação de orçamento"
-            description="Selecione a demanda e o fornecedor destinatário."
-          />
-          <form onSubmit={salvarSolicitacao} className="grid gap-4 p-5 md:grid-cols-2">
-            <Select
-              label="Demanda *"
-              value={novaSolicitacao.demandaId}
-              onChange={(event) =>
-                setNovaSolicitacao({
-                  ...novaSolicitacao,
-                  demandaId: event.target.value,
-                })
-              }
-            >
-              <option value="">Selecione uma demanda</option>
-              {demandas.map((item) => (
-                <option key={item._id} value={item._id}>
-                  {item.numeroDemanda} - {item.objeto}
-                </option>
-              ))}
-            </Select>
-
-            <Select
-              label="Fornecedor *"
-              value={novaSolicitacao.fornecedorId}
-              onChange={(event) =>
-                setNovaSolicitacao({
-                  ...novaSolicitacao,
-                  fornecedorId: event.target.value,
-                })
-              }
-            >
-              <option value="">Selecione um fornecedor</option>
-              {fornecedores
-                .filter((item) => item.status === "Ativo")
-                .map((item) => (
-                  <option key={item._id} value={item._id}>
-                    {item.empresa}
-                  </option>
-                ))}
-            </Select>
-
-            <Input
-              label="Prazo para resposta"
-              type="date"
-              value={novaSolicitacao.prazo}
-              onChange={(event) =>
-                setNovaSolicitacao({
-                  ...novaSolicitacao,
-                  prazo: event.target.value,
-                })
-              }
-            />
-
-            <Textarea
-              label="Observações"
-              rows="3"
-              value={novaSolicitacao.observacao}
-              onChange={(event) =>
-                setNovaSolicitacao({
-                  ...novaSolicitacao,
-                  observacao: event.target.value,
-                })
-              }
-            />
-
-            <div className="flex gap-3 md:col-span-2 md:justify-end">
+            title="Nova cotação eletrônica"
+            description="A mesma demanda será enviada para todos os fornecedores selecionados."
+            action={
               <button
                 type="button"
-                onClick={() => setMostrarFormSolicitacao(false)}
+                onClick={() => setMostrarFormCotacao(false)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={19} />
+              </button>
+            }
+          />
+
+          <form onSubmit={salvarCotacao}>
+            <div className="grid gap-5 p-5 lg:grid-cols-2">
+              <Select
+                label="Demanda *"
+                value={novaCotacao.demandaId}
+                onChange={(event) =>
+                  setNovaCotacao((atual) => ({
+                    ...atual,
+                    demandaId: event.target.value,
+                  }))
+                }
+              >
+                <option value="">Selecione uma demanda</option>
+
+                {demandas.map((item) => (
+                  <option key={item._id} value={item._id}>
+                    {item.numeroDemanda} - {item.objeto}
+                  </option>
+                ))}
+              </Select>
+
+              <Input
+                label="Prazo máximo em horas *"
+                type="number"
+                min="1"
+                max="720"
+                value={novaCotacao.prazoHoras}
+                onChange={(event) =>
+                  setNovaCotacao((atual) => ({
+                    ...atual,
+                    prazoHoras: event.target.value,
+                  }))
+                }
+              />
+
+              <div className="lg:col-span-2">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">
+                      Fornecedores participantes *
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Apenas fornecedores ativos e com e-mail podem participar.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={selecionarTodosFornecedoresCotacao}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                  >
+                    <ListChecks size={16} />
+                    {novaCotacao.fornecedorIds.length ===
+                    fornecedores.filter(
+                      (item) => item.status === "Ativo" && item.email
+                    ).length
+                      ? "Limpar seleção"
+                      : "Selecionar todos"}
+                  </button>
+                </div>
+
+                <div className="grid max-h-80 gap-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2 xl:grid-cols-3">
+                  {fornecedores
+                    .filter((item) => item.status === "Ativo" && item.email)
+                    .map((item) => {
+                      const selecionado =
+                        novaCotacao.fornecedorIds.includes(item._id)
+
+                      return (
+                        <label
+                          key={item._id}
+                          className={`cursor-pointer rounded-xl border p-4 transition ${
+                            selecionado
+                              ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
+                              : "border-slate-200 bg-white hover:border-blue-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={selecionado}
+                              onChange={() =>
+                                alternarFornecedorCotacao(item._id)
+                              }
+                              className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-900">
+                                {item.empresa}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-slate-500">
+                                {item.email}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-slate-400">
+                                {item.cnpj || "CNPJ não informado"}
+                              </p>
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+
+                  {fornecedores.filter(
+                    (item) => item.status === "Ativo" && item.email
+                  ).length === 0 && (
+                    <div className="py-8 text-center md:col-span-2 xl:col-span-3">
+                      <Truck className="mx-auto text-slate-400" size={28} />
+                      <p className="mt-3 text-sm font-semibold text-slate-700">
+                        Nenhum fornecedor disponível
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Cadastre um fornecedor ativo com e-mail.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="mt-3 text-sm font-semibold text-blue-700">
+                  {novaCotacao.fornecedorIds.length} fornecedor(es) selecionado(s)
+                </p>
+              </div>
+
+              <Textarea
+                label="Observações para os fornecedores"
+                className="lg:col-span-2"
+                rows="4"
+                value={novaCotacao.observacao}
+                onChange={(event) =>
+                  setNovaCotacao((atual) => ({
+                    ...atual,
+                    observacao: event.target.value,
+                  }))
+                }
+                placeholder="Ex.: informar marca, frete, prazo de entrega e validade da proposta."
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setMostrarFormCotacao(false)}
                 className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Cancelar
               </button>
+
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                disabled={carregando}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Send size={17} />
-                Enviar solicitação
+                {carregando ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    Criando e enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send size={17} />
+                    Criar e enviar cotação
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -1817,82 +2128,401 @@ export default function Dashboard() {
 
       <Card className="mt-6">
         <CardHeader
-          title="Solicitações cadastradas"
-          description={`${solicitacoes.length} registro(s) encontrado(s).`}
+          title="Cotações cadastradas"
+          description={`${cotacoes.length} registro(s) encontrado(s).`}
         />
 
-        {solicitacoes.length === 0 ? (
+        {cotacoes.length === 0 ? (
           <EmptyState
             icon={Send}
-            title="Nenhuma solicitação enviada"
-            description="Crie uma solicitação para encaminhar a demanda a um fornecedor."
-            actionLabel="Nova solicitação"
-            onAction={() => setMostrarFormSolicitacao(true)}
+            title="Nenhuma cotação cadastrada"
+            description="Crie uma cotação para enviar a demanda a vários fornecedores."
+            actionLabel="Nova cotação"
+            onAction={() => setMostrarFormCotacao(true)}
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px]">
+            <table className="w-full min-w-[1250px]">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-5 py-3.5">Nº</th>
+                  <th className="px-5 py-3.5">Cotação</th>
                   <th className="px-5 py-3.5">Demanda</th>
-                  <th className="px-5 py-3.5">Fornecedor</th>
-                  <th className="px-5 py-3.5">Prazo</th>
+                  <th className="px-5 py-3.5">Fornecedores</th>
+                  <th className="px-5 py-3.5">E-mails</th>
+                  <th className="px-5 py-3.5">Respostas</th>
+                  <th className="px-5 py-3.5">Encerramento</th>
                   <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5">Criada em</th>
+                  <th className="px-5 py-3.5">Vencedor</th>
                   <th className="px-5 py-3.5 text-right">Ações</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-100">
-                {solicitacoes.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/70">
-                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                      {item.numero}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {item.demanda}
-                      </p>
-                      <p className="mt-1 max-w-sm truncate text-xs text-slate-500">
-                        {item.objeto}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="text-sm text-slate-700">{item.fornecedor}</p>
-                      <p className="mt-1 text-xs text-slate-400">{item.email}</p>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-600">
-                      {formatarData(item.prazo)}
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusBadge status={item.status} />
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-600">
-                      {formatarData(item.criadaEm)}
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex justify-end gap-2">
-                        <ActionButton title="Visualizar" icon={Eye} />
-                        <ActionButton title="Copiar link" icon={Copy} tone="blue" />
-                        <ActionButton
-                          title="Excluir"
-                          icon={Trash2}
-                          tone="red"
-                          onClick={() =>
-                            setSolicitacoes((old) =>
-                              old.filter((solicitacao) => solicitacao.id !== item.id)
-                            )
-                          }
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {cotacoes.map((item) => {
+                  const participantes = item.participantes || []
+                  const emailsEnviados = participantes.filter(
+                    (participante) => participante.emailEnviado
+                  ).length
+                  const respostas = participantes.filter(
+                    (participante) => participante.respondeuEm
+                  ).length
+                  const vencedoraCotacao = item.propostaVencedora
+
+                  return (
+                    <tr key={item._id} className="hover:bg-slate-50/70">
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.numero}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Prazo: {item.prazoHoras}h
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-slate-800">
+                          {item.demanda?.numeroDemanda || "-"}
+                        </p>
+                        <p className="mt-1 max-w-xs truncate text-xs text-slate-500">
+                          {item.demanda?.objeto || "-"}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-700">
+                        {participantes.length}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className={`text-sm font-semibold ${
+                            emailsEnviados === participantes.length
+                              ? "text-emerald-700"
+                              : "text-amber-700"
+                          }`}
+                        >
+                          {emailsEnviados}/{participantes.length}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span className="text-sm font-semibold text-blue-700">
+                          {respostas}/{participantes.length}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {item.encerraEm
+                          ? new Date(item.encerraEm).toLocaleString("pt-BR")
+                          : "-"}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <StatusBadge status={item.status} />
+                      </td>
+
+                      <td className="px-5 py-4">
+                        {vencedoraCotacao ? (
+                          <div>
+                            <p className="max-w-[180px] truncate text-sm font-semibold text-emerald-700">
+                              {vencedoraCotacao.fornecedor?.empresa ||
+                                vencedoraCotacao.fornecedor?.razaoSocial ||
+                                "Fornecedor vencedor"}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              {formatarMoeda(
+                                vencedoraCotacao.valorTotal ||
+                                  vencedoraCotacao.valor
+                              )}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-400">Aguardando</span>
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-2">
+                          <ActionButton
+                            title="Visualizar detalhes"
+                            icon={Eye}
+                            onClick={() => abrirDetalhesCotacao(item._id)}
+                          />
+
+                          {item.status === "Aberta" && (
+                            <>
+                              <ActionButton
+                                title="Reenviar e-mails"
+                                icon={Mail}
+                                tone="blue"
+                                onClick={() =>
+                                  executarAcaoCotacao(item._id, "reenviar")
+                                }
+                              />
+
+                              <ActionButton
+                                title="Encerrar e calcular vencedor"
+                                icon={Trophy}
+                                tone="emerald"
+                                onClick={() =>
+                                  executarAcaoCotacao(item._id, "encerrar")
+                                }
+                              />
+
+                              <ActionButton
+                                title="Cancelar cotação"
+                                icon={CircleX}
+                                tone="red"
+                                onClick={() =>
+                                  executarAcaoCotacao(item._id, "cancelar")
+                                }
+                              />
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </Card>
+
+      {mostrarDetalhesCotacao && cotacaoSelecionada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {cotacaoSelecionada.cotacao?.numero || "Detalhes da cotação"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Fornecedores convidados e propostas recebidas.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMostrarDetalhesCotacao(false)
+                  setCotacaoSelecionada(null)
+                }}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-6 p-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Demanda
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {cotacaoSelecionada.cotacao?.demanda?.numeroDemanda || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Prazo
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {cotacaoSelecionada.cotacao?.prazoHoras || 0} hora(s)
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Encerramento
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {cotacaoSelecionada.cotacao?.encerraEm
+                      ? new Date(
+                          cotacaoSelecionada.cotacao.encerraEm
+                        ).toLocaleString("pt-BR")
+                      : "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Status
+                  </p>
+                  <div className="mt-2">
+                    <StatusBadge
+                      status={cotacaoSelecionada.cotacao?.status || "Aberta"}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Card>
+                <CardHeader
+                  title="Fornecedores convidados"
+                  description="Situação do envio, visualização e resposta."
+                />
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px]">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3.5">Fornecedor</th>
+                        <th className="px-5 py-3.5">E-mail</th>
+                        <th className="px-5 py-3.5">Envio</th>
+                        <th className="px-5 py-3.5">Visualização</th>
+                        <th className="px-5 py-3.5">Resposta</th>
+                        <th className="px-5 py-3.5 text-right">Link</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100">
+                      {(
+                        cotacaoSelecionada.cotacao?.participantes || []
+                      ).map((participante) => (
+                        <tr key={participante._id || participante.token}>
+                          <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                            {participante.fornecedor?.empresa ||
+                              participante.fornecedor?.razaoSocial ||
+                              "Fornecedor"}
+                          </td>
+
+                          <td className="px-5 py-4 text-sm text-slate-600">
+                            {participante.email || participante.fornecedor?.email}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <StatusBadge
+                              status={
+                                participante.emailEnviado
+                                  ? "Enviado"
+                                  : "Pendente"
+                              }
+                            />
+                            {participante.erroEmail && (
+                              <p className="mt-2 max-w-xs text-xs text-red-600">
+                                {participante.erroEmail}
+                              </p>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4 text-sm text-slate-600">
+                            {participante.visualizadoEm
+                              ? new Date(
+                                  participante.visualizadoEm
+                                ).toLocaleString("pt-BR")
+                              : "Não visualizado"}
+                          </td>
+
+                          <td className="px-5 py-4 text-sm text-slate-600">
+                            {participante.respondeuEm
+                              ? new Date(
+                                  participante.respondeuEm
+                                ).toLocaleString("pt-BR")
+                              : "Aguardando"}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex justify-end">
+                              <ActionButton
+                                title="Copiar link do fornecedor"
+                                icon={Copy}
+                                tone="blue"
+                                onClick={() =>
+                                  copiarLinkCotacao(participante.token)
+                                }
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              <Card>
+                <CardHeader
+                  title="Propostas recebidas"
+                  description="Classificação pelo menor valor total."
+                />
+
+                {(cotacaoSelecionada.propostas || []).length === 0 ? (
+                  <EmptyState
+                    icon={ClipboardList}
+                    title="Nenhuma proposta recebida"
+                    description="Os fornecedores ainda não enviaram valores para esta cotação."
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px]">
+                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-5 py-3.5">Classificação</th>
+                          <th className="px-5 py-3.5">Fornecedor</th>
+                          <th className="px-5 py-3.5">Valor total</th>
+                          <th className="px-5 py-3.5">Entrega</th>
+                          <th className="px-5 py-3.5">Validade</th>
+                          <th className="px-5 py-3.5">Status</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {(cotacaoSelecionada.propostas || []).map(
+                          (proposta, index) => (
+                            <tr key={proposta._id}>
+                              <td className="px-5 py-4">
+                                <div
+                                  className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                                    index === 0
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-slate-100 text-slate-600"
+                                  }`}
+                                >
+                                  {index + 1}º
+                                </div>
+                              </td>
+
+                              <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                                {proposta.fornecedor?.empresa ||
+                                  proposta.fornecedor?.razaoSocial ||
+                                  "Fornecedor"}
+                              </td>
+
+                              <td className="px-5 py-4 text-sm font-bold text-slate-900">
+                                {formatarMoeda(
+                                  proposta.valorTotal || proposta.valor
+                                )}
+                              </td>
+
+                              <td className="px-5 py-4 text-sm text-slate-600">
+                                {proposta.prazoEntrega || "-"}
+                              </td>
+
+                              <td className="px-5 py-4 text-sm text-slate-600">
+                                {proposta.validadeDias ||
+                                  proposta.validade ||
+                                  60}{" "}
+                                dias
+                              </td>
+
+                              <td className="px-5 py-4">
+                                <StatusBadge status={proposta.status} />
+                              </td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 
