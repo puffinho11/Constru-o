@@ -134,6 +134,4 @@ const cotacaoSchema = new mongoose.Schema(
   }
 )
 
-cotacaoSchema.index({ "participantes.token": 1 })
-
 export default mongoose.model("Cotacao", cotacaoSchema)
