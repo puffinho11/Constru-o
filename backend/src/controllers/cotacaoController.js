@@ -11,10 +11,13 @@ import { finalizarCotacao } from "../services/cotacaoService.js"
 async function gerarNumeroCotacao() {
   const ano = new Date().getFullYear()
 
+  const inicioAno = new Date(`${ano}-01-01T00:00:00.000Z`)
+  const fimAno = new Date(`${ano}-12-31T23:59:59.999Z`)
+
   const total = await Cotacao.countDocuments({
     createdAt: {
-      $gte: new Date(`${ano}-01-01T00:00:00.000Z`),
-      $lte: new Date(`${ano}-12-31T23:59:59.999Z`),
+      $gte: inicioAno,
+      $lte: fimAno,
     },
   })
 
@@ -27,6 +30,10 @@ function criarToken() {
 
 function cotacaoExpirada(cotacao) {
   return new Date() >= new Date(cotacao.encerraEm)
+}
+
+function obterUsuarioId(req) {
+  return req.user?._id || req.user?.id || null
 }
 
 export async function listarCotacoes(req, res) {
@@ -44,11 +51,13 @@ export async function listarCotacoes(req, res) {
         createdAt: -1,
       })
 
-    return res.json(cotacoes)
+    return res.status(200).json(cotacoes)
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao listar cotações:", error)
+
     return res.status(500).json({
       erro: "Erro ao listar cotações.",
+      detalhe: error.message,
     })
   }
 }
@@ -91,16 +100,19 @@ export async function buscarCotacaoPorId(req, res) {
       .populate("fornecedor")
       .sort({
         valorTotal: 1,
+        recebidaEm: 1,
       })
 
-    return res.json({
+    return res.status(200).json({
       cotacao,
       propostas,
     })
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao buscar cotação:", error)
+
     return res.status(500).json({
       erro: "Erro ao buscar cotação.",
+      detalhe: error.message,
     })
   }
 }
@@ -134,11 +146,13 @@ export async function criarCotacao(req, res) {
       })
     }
 
+    const idsUnicos = [...new Set(fornecedorIds.map(String))]
+
     const [demanda, fornecedores] = await Promise.all([
       Demanda.findById(demandaId),
       Fornecedor.find({
         _id: {
-          $in: fornecedorIds,
+          $in: idsUnicos,
         },
         status: "Ativo",
       }),
@@ -157,14 +171,17 @@ export async function criarCotacao(req, res) {
     }
 
     const fornecedoresSemEmail = fornecedores.filter(
-      (fornecedor) => !fornecedor.email
+      (fornecedor) => !fornecedor.email?.trim()
     )
 
     if (fornecedoresSemEmail.length > 0) {
       return res.status(400).json({
         erro: "Existem fornecedores sem e-mail cadastrado.",
         fornecedores: fornecedoresSemEmail.map(
-          (fornecedor) => fornecedor.empresa || fornecedor._id
+          (fornecedor) =>
+            fornecedor.empresa ||
+            fornecedor.razaoSocial ||
+            String(fornecedor._id)
         ),
       })
     }
@@ -177,7 +194,9 @@ export async function criarCotacao(req, res) {
     const participantes = fornecedores.map((fornecedor) => ({
       fornecedor: fornecedor._id,
       token: criarToken(),
-      email: fornecedor.email,
+      email: fornecedor.email.trim().toLowerCase(),
+      emailEnviado: false,
+      erroEmail: "",
     }))
 
     const cotacao = await Cotacao.create({
@@ -187,9 +206,9 @@ export async function criarCotacao(req, res) {
       prazoHoras: horas,
       inicioEm,
       encerraEm,
-      observacao: observacao || "",
+      observacao: observacao?.trim() || "",
       status: "Aberta",
-      criadaPor: req.user?._id || req.user?.id || null,
+      criadaPor: obterUsuarioId(req),
     })
 
     const frontendUrl =
@@ -202,6 +221,10 @@ export async function criarCotacao(req, res) {
             String(item.fornecedor) === String(fornecedor._id)
         )
 
+        if (!participante) {
+          throw new Error("Participante da cotação não encontrado.")
+        }
+
         const link = `${frontendUrl}/cotacao/${participante.token}`
 
         const resultado = await enviarEmailCotacao({
@@ -209,7 +232,8 @@ export async function criarCotacao(req, res) {
           nomeFornecedor:
             fornecedor.empresa ||
             fornecedor.razaoSocial ||
-            fornecedor.responsavel,
+            fornecedor.responsavel ||
+            "Fornecedor",
           numeroCotacao: cotacao.numero,
           numeroDemanda: demanda.numeroDemanda,
           objeto: demanda.objeto,
@@ -218,7 +242,7 @@ export async function criarCotacao(req, res) {
           encerraEm,
           link,
           materiais: demanda.materiais || [],
-          observacao,
+          observacao: observacao?.trim() || "",
         })
 
         return {
@@ -228,8 +252,7 @@ export async function criarCotacao(req, res) {
       })
     )
 
-    for (let index = 0; index < resultadosEmail.length; index += 1) {
-      const resultado = resultadosEmail[index]
+    resultadosEmail.forEach((resultado, index) => {
       const fornecedor = fornecedores[index]
 
       const participante = cotacao.participantes.find(
@@ -237,7 +260,7 @@ export async function criarCotacao(req, res) {
           String(item.fornecedor) === String(fornecedor._id)
       )
 
-      if (!participante) continue
+      if (!participante) return
 
       if (resultado.status === "fulfilled") {
         participante.emailEnviado = true
@@ -246,9 +269,10 @@ export async function criarCotacao(req, res) {
       } else {
         participante.emailEnviado = false
         participante.erroEmail =
-          resultado.reason?.message || "Erro desconhecido no envio."
+          resultado.reason?.message ||
+          "Erro desconhecido no envio do e-mail."
       }
-    }
+    })
 
     await cotacao.save()
 
@@ -265,7 +289,7 @@ export async function criarCotacao(req, res) {
       cotacao: cotacaoCompleta,
     })
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao criar cotação:", error)
 
     return res.status(500).json({
       erro: "Erro ao criar a cotação.",
@@ -301,11 +325,14 @@ export async function reenviarEmailsCotacao(req, res) {
         const link = `${frontendUrl}/cotacao/${participante.token}`
 
         const resultado = await enviarEmailCotacao({
-          destinatario: participante.email,
+          destinatario:
+            participante.email ||
+            fornecedor?.email,
           nomeFornecedor:
             fornecedor?.empresa ||
             fornecedor?.razaoSocial ||
-            fornecedor?.responsavel,
+            fornecedor?.responsavel ||
+            "Fornecedor",
           numeroCotacao: cotacao.numero,
           numeroDemanda: cotacao.demanda?.numeroDemanda,
           objeto: cotacao.demanda?.objeto,
@@ -331,21 +358,26 @@ export async function reenviarEmailsCotacao(req, res) {
       } else {
         participante.emailEnviado = false
         participante.erroEmail =
-          resultado.reason?.message || "Erro no reenvio."
+          resultado.reason?.message || "Erro no reenvio do e-mail."
       }
     })
 
     await cotacao.save()
 
-    return res.json({
-      mensagem: "Tentativa de reenvio concluída.",
+    const enviados = cotacao.participantes.filter(
+      (item) => item.emailEnviado
+    ).length
+
+    return res.status(200).json({
+      mensagem: `Reenvio concluído. ${enviados} de ${cotacao.participantes.length} e-mail(s) enviado(s).`,
       cotacao,
     })
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao reenviar e-mails:", error)
 
     return res.status(500).json({
       erro: "Erro ao reenviar os e-mails.",
+      detalhe: error.message,
     })
   }
 }
@@ -364,12 +396,12 @@ export async function encerrarCotacao(req, res) {
         },
       })
 
-    return res.json({
+    return res.status(200).json({
       mensagem: "Cotação encerrada e resultado calculado.",
       cotacao: cotacaoCompleta,
     })
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao encerrar cotação:", error)
 
     return res.status(500).json({
       erro: error.message || "Erro ao encerrar cotação.",
@@ -387,18 +419,25 @@ export async function cancelarCotacao(req, res) {
       })
     }
 
+    if (cotacao.status === "Finalizada") {
+      return res.status(400).json({
+        erro: "Uma cotação finalizada não pode ser cancelada.",
+      })
+    }
+
     cotacao.status = "Cancelada"
     await cotacao.save()
 
-    return res.json({
+    return res.status(200).json({
       mensagem: "Cotação cancelada.",
       cotacao,
     })
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao cancelar cotação:", error)
 
     return res.status(500).json({
       erro: "Erro ao cancelar cotação.",
+      detalhe: error.message,
     })
   }
 }
@@ -443,7 +482,7 @@ export async function acessarCotacaoPublica(req, res) {
       await finalizarCotacao(cotacao._id)
     }
 
-    return res.json({
+    return res.status(200).json({
       cotacao: {
         id: cotacao._id,
         numero: cotacao.numero,
@@ -461,7 +500,10 @@ export async function acessarCotacaoPublica(req, res) {
           participante.fornecedor?.razaoSocial ||
           participante.fornecedor?.responsavel ||
           "Fornecedor",
-        email: participante.email,
+        email:
+          participante.email ||
+          participante.fornecedor?.email ||
+          "",
       },
 
       demanda: {
@@ -474,16 +516,18 @@ export async function acessarCotacaoPublica(req, res) {
 
       propostaEnviada: Boolean(proposta),
       proposta,
+
       podeResponder:
         cotacao.status === "Aberta" &&
         !expirada &&
         !proposta,
     })
   } catch (error) {
-    console.error(error)
+    console.error("Erro ao abrir cotação pública:", error)
 
     return res.status(500).json({
       erro: "Erro ao abrir a cotação.",
+      detalhe: error.message,
     })
   }
 }

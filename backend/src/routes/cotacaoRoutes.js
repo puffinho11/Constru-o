@@ -22,7 +22,7 @@ const router = Router()
 router.get("/publica/:token", acessarCotacaoPublica)
 router.post("/publica/:token/proposta", enviarPropostaPublica)
 
-// Rotas administrativas.
+// Todas as rotas abaixo exigem token administrativo.
 router.use(authMiddleware)
 
 router.get("/", listarCotacoes)
