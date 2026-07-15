@@ -27,7 +27,6 @@ import {
   Users,
   PackageSearch,
   ArrowRight,
-  Bell,
   Filter,
   Save,
   Loader2,
@@ -3523,20 +3522,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {carregando && (
-              <Loader2 size={18} className="animate-spin text-blue-600" />
-            )}
-
-            <button className="relative rounded-xl p-2.5 text-slate-500 hover:bg-slate-100">
-              <Bell size={19} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-blue-600 ring-2 ring-white" />
-            </button>
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold text-white">
-              {(user?.nome || "A").charAt(0).toUpperCase()}
-            </div>
-          </div>
+          {carregando && (
+            <Loader2 size={18} className="animate-spin text-blue-600" />
+          )}
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8">
