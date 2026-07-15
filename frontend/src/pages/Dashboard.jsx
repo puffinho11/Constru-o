@@ -750,6 +750,63 @@ export default function Dashboard() {
     }
   }
 
+  async function excluirCotacao(cotacaoId, numeroCotacao = "") {
+    const identificacao = numeroCotacao ? ` ${numeroCotacao}` : ""
+
+    const confirmado = window.confirm(
+      `Deseja realmente excluir a cotação${identificacao}?\n\n` +
+        "Todas as propostas vinculadas também serão excluídas. " +
+        "Esta ação não poderá ser desfeita."
+    )
+
+    if (!confirmado) return
+
+    setCarregando(true)
+
+    try {
+      const response = await fetch(`${API_URL}/cotacoes/${cotacaoId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      })
+
+      const contentType = response.headers.get("content-type") || ""
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : {
+            erro: await response.text(),
+          }
+
+      if (!response.ok) {
+        throw new Error(
+          data.erro ||
+            data.message ||
+            "Erro ao excluir a cotação."
+        )
+      }
+
+      if (cotacaoSelecionada?.cotacao?._id === cotacaoId) {
+        setMostrarDetalhesCotacao(false)
+        setCotacaoSelecionada(null)
+      }
+
+      await Promise.all([
+        carregarCotacoes(),
+        carregarPropostas(),
+      ])
+
+      alert(
+        data.mensagem ||
+          data.message ||
+          "Cotação excluída com sucesso."
+      )
+    } catch (error) {
+      console.error("Erro ao excluir cotação:", error)
+      alert(error.message || "Erro ao excluir a cotação.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
   async function abrirDetalhesCotacao(cotacaoId) {
     setCarregando(true)
 
@@ -1930,14 +1987,37 @@ export default function Dashboard() {
                       }
                     >
                       <option value="">Selecione</option>
-                      <option value="UN">Unidade</option>
-                      <option value="SC">Saco</option>
-                      <option value="KG">Quilograma</option>
-                      <option value="L">Litro</option>
-                      <option value="M">Metro</option>
-                      <option value="M²">Metro quadrado</option>
-                      <option value="M³">Metro cúbico</option>
-                      <option value="CX">Caixa</option>
+                      <option value="UN">UN - Unidade</option>
+                      <option value="KG">KG - Quilograma</option>
+                      <option value="G">G - Grama</option>
+                      <option value="T">T - Tonelada</option>
+                      <option value="L">L - Litro</option>
+                      <option value="ML">ML - Mililitro</option>
+                      <option value="M">M - Metro</option>
+                      <option value="M2">M2 - Metro quadrado</option>
+                      <option value="M3">M3 - Metro cúbico</option>
+                      <option value="KM">KM - Quilômetro</option>
+                      <option value="H">H - Hora</option>
+                      <option value="H/DIA">H/DIA - Hora por dia</option>
+                      <option value="MES">MES - Mês</option>
+                      <option value="DIA">DIA - Dia</option>
+                      <option value="CHI">CHI - Custo horário improdutivo</option>
+                      <option value="CHP">CHP - Custo horário produtivo</option>
+                      <option value="CJ">CJ - Conjunto</option>
+                      <option value="PAR">PAR - Par</option>
+                      <option value="JG">JG - Jogo</option>
+                      <option value="KIT">KIT - Kit</option>
+                      <option value="PCT">PCT - Pacote</option>
+                      <option value="SC">SC - Saco</option>
+                      <option value="CX">CX - Caixa</option>
+                      <option value="GL">GL - Galão</option>
+                      <option value="BD">BD - Balde</option>
+                      <option value="RL">RL - Rolo</option>
+                      <option value="FL">FL - Folha</option>
+                      <option value="BR">BR - Barra</option>
+                      <option value="PÇ">PÇ - Peça</option>
+                      <option value="MIL">MIL - Milheiro</option>
+                      <option value="CENTO">CENTO - Cento</option>
                     </Select>
                     <Input
                       label="Observação"
@@ -2654,6 +2734,15 @@ export default function Dashboard() {
                               />
                             </>
                           )}
+
+                          <ActionButton
+                            title="Excluir cotação definitivamente"
+                            icon={Trash2}
+                            tone="red"
+                            onClick={() =>
+                              excluirCotacao(item._id, item.numero)
+                            }
+                          />
                         </div>
                       </td>
                     </tr>
@@ -4345,6 +4434,9 @@ export default function Dashboard() {
           {telaAtual === "orcamento" && OrcamentoPage}
           {telaAtual === "solicitacao" && SolicitacoesPage}
           {telaAtual === "fornecedores" && FornecedoresPage}
+          {telaAtual === "propostas" && PropostasPage}
+          {telaAtual === "julgamento" && JulgamentoPage}
+          {telaAtual === "resultado" && ResultadoPage}
           {telaAtual === "arquivos" && ArquivosPage}
         </main>
       </div>
