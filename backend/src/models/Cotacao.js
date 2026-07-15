@@ -41,7 +41,7 @@ const participanteSchema = new mongoose.Schema(
       default: null,
     },
 
-    respondeuEm: {
+    respondidoEm: {
       type: Date,
       default: null,
     },
@@ -69,8 +69,10 @@ const cotacaoSchema = new mongoose.Schema(
     participantes: {
       type: [participanteSchema],
       validate: {
-        validator: (itens) => Array.isArray(itens) && itens.length > 0,
-        message: "A cotação precisa possuir pelo menos um fornecedor.",
+        validator: (itens) =>
+          Array.isArray(itens) && itens.length > 0,
+        message:
+          "A cotação precisa possuir pelo menos um fornecedor.",
       },
     },
 
@@ -128,10 +130,18 @@ const cotacaoSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    canceladaEm: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 )
 
-export default mongoose.model("Cotacao", cotacaoSchema)
+export default mongoose.model(
+  "Cotacao",
+  cotacaoSchema
+)

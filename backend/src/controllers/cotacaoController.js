@@ -244,6 +244,8 @@ export async function criarCotacao(
         (fornecedor) => ({
           fornecedor:
             fornecedor._id,
+          email:
+            fornecedor.email,
           token: criarToken(),
           emailEnviado: false,
           enviadoEm: null,
@@ -258,6 +260,7 @@ export async function criarCotacao(
         numero:
           await gerarNumeroCotacao(),
         demanda: demanda._id,
+        inicioEm: agora,
         prazoHoras: horas,
         encerraEm,
         observacao:
@@ -362,7 +365,6 @@ export async function criarCotacao(
     });
   }
 }
-
 export async function reenviarEmailsCotacao(
   req,
   res
@@ -699,19 +701,16 @@ export async function excluirCotacao(
     });
   }
 }
-
 export async function acessarCotacaoPublica(
   req,
   res
 ) {
   try {
-    const { token } =
-      req.params;
+    const { token } = req.params;
 
     const cotacao =
       await Cotacao.findOne({
-        "participantes.token":
-          token,
+        "participantes.token": token,
       })
         .populate({
           path: "demanda",
