@@ -20,10 +20,7 @@ export default function App() {
           }
         />
 
-        <Route
-          path="/cotacao/:token"
-          element={<CotacaoPublica />}
-        />
+        <Route path="/cotacao/:token" element={<CotacaoPublica />} />
       </Routes>
     </BrowserRouter>
   );

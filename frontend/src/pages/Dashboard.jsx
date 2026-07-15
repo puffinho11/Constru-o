@@ -324,6 +324,7 @@ export default function Dashboard() {
   const [mostrarFormCotacao, setMostrarFormCotacao] = useState(false)
   const [cotacaoSelecionada, setCotacaoSelecionada] = useState(null)
   const [mostrarDetalhesCotacao, setMostrarDetalhesCotacao] = useState(false)
+  const [abaCotacao, setAbaCotacao] = useState("visao")
   const [novaCotacao, setNovaCotacao] = useState({
     demandaId: "",
     fornecedorIds: [],
@@ -392,6 +393,7 @@ export default function Dashboard() {
       carregarDemandas(),
       carregarFornecedores(),
       carregarCotacoes(),
+      carregarPropostas(),
     ])
 
     setCarregando(false)
@@ -449,6 +451,25 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Erro ao carregar cotações:", error)
       setCotacoes([])
+    }
+  }
+
+  async function carregarPropostas() {
+    try {
+      const response = await fetch(`${API_URL}/propostas`, {
+        headers: authHeaders(),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar propostas.")
+      }
+
+      setPropostas(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error("Erro ao carregar propostas:", error)
+      setPropostas([])
     }
   }
 
@@ -592,10 +613,107 @@ export default function Dashboard() {
       }
 
       setCotacaoSelecionada(data)
+      setAbaCotacao("visao")
       setMostrarDetalhesCotacao(true)
     } catch (error) {
       console.error(error)
       alert(error.message || "Erro ao carregar os detalhes da cotação.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function julgarPropostaCotacao(
+    propostaId,
+    status,
+    justificativa = ""
+  ) {
+    if (!propostaId) return
+
+    if (
+      status === "Vencedora" &&
+      !confirm("Deseja declarar esta proposta como vencedora?")
+    ) {
+      return
+    }
+
+    setCarregando(true)
+
+    try {
+      const response = await fetch(
+        `${API_URL}/propostas/${propostaId}/julgamento`,
+        {
+          method: "PATCH",
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            status,
+            justificativa,
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao julgar proposta.")
+      }
+
+      const cotacaoId = cotacaoSelecionada?.cotacao?._id
+
+      if (cotacaoId) {
+        const detalhesResponse = await fetch(
+          `${API_URL}/cotacoes/${cotacaoId}`,
+          {
+            headers: authHeaders(),
+          }
+        )
+
+        const detalhes = await detalhesResponse.json()
+
+        if (!detalhesResponse.ok) {
+          throw new Error(
+            detalhes.erro || "Erro ao atualizar os detalhes da cotação."
+          )
+        }
+
+        setCotacaoSelecionada(detalhes)
+      }
+
+      await Promise.all([carregarCotacoes(), carregarPropostas()])
+      alert("Julgamento salvo com sucesso.")
+    } catch (error) {
+      console.error(error)
+      alert(error.message || "Erro ao julgar proposta.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function abrirCotacaoNaAba(cotacaoId, aba = "visao") {
+    if (!cotacaoId) {
+      alert("Cotação não identificada.")
+      return
+    }
+
+    setCarregando(true)
+
+    try {
+      const response = await fetch(`${API_URL}/cotacoes/${cotacaoId}`, {
+        headers: authHeaders(),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar a cotação.")
+      }
+
+      setCotacaoSelecionada(data)
+      setAbaCotacao(aba)
+      setMostrarDetalhesCotacao(true)
+    } catch (error) {
+      console.error(error)
+      alert(error.message || "Erro ao abrir a cotação.")
     } finally {
       setCarregando(false)
     }
@@ -1035,9 +1153,16 @@ export default function Dashboard() {
     return total + quantidade * valorUnitario
   }, 0)
 
-  const propostasOrdenadas = [...propostas].sort((a, b) => a.valor - b.valor)
+  const propostasOrdenadas = [...propostas].sort(
+    (a, b) =>
+      Number(a.valorTotal || a.valor || 0) -
+      Number(b.valorTotal || b.valor || 0)
+  )
   const vencedora = propostasOrdenadas.find(
-    (item) => item.status === "Aprovado" || item.status === "Vencedor"
+    (item) =>
+      item.status === "Aprovado" ||
+      item.status === "Vencedor" ||
+      item.status === "Vencedora"
   )
   const menorProposta = propostasOrdenadas[0]
 
@@ -2290,14 +2415,14 @@ export default function Dashboard() {
 
       {mostrarDetalhesCotacao && cotacaoSelecionada && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <div className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
                   {cotacaoSelecionada.cotacao?.numero || "Detalhes da cotação"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Fornecedores convidados e propostas recebidas.
+                  Propostas, julgamento e resultado da cotação.
                 </p>
               </div>
 
@@ -2306,11 +2431,35 @@ export default function Dashboard() {
                 onClick={() => {
                   setMostrarDetalhesCotacao(false)
                   setCotacaoSelecionada(null)
+                  setAbaCotacao("visao")
                 }}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X size={20} />
               </button>
+            </div>
+
+            <div className="sticky top-[73px] z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-5">
+              {[
+                ["visao", "Visão geral", Eye],
+                ["propostas", "Propostas", ClipboardList],
+                ["julgamento", "Julgamento", Gavel],
+                ["resultado", "Resultado", Trophy],
+              ].map(([id, nome, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAbaCotacao(id)}
+                  className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition ${
+                    abaCotacao === id
+                      ? "border-blue-600 text-blue-700"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {nome}
+                </button>
+              ))}
             </div>
 
             <div className="space-y-6 p-5">
@@ -2326,10 +2475,10 @@ export default function Dashboard() {
 
                 <div className="rounded-xl bg-slate-50 p-4">
                   <p className="text-xs uppercase tracking-wide text-slate-500">
-                    Prazo
+                    Propostas recebidas
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {cotacaoSelecionada.cotacao?.prazoHoras || 0} hora(s)
+                    {(cotacaoSelecionada.propostas || []).length}
                   </p>
                 </div>
 
@@ -2358,170 +2507,385 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <Card>
-                <CardHeader
-                  title="Fornecedores convidados"
-                  description="Situação do envio, visualização e resposta."
-                />
-
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px]">
-                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-5 py-3.5">Fornecedor</th>
-                        <th className="px-5 py-3.5">E-mail</th>
-                        <th className="px-5 py-3.5">Envio</th>
-                        <th className="px-5 py-3.5">Visualização</th>
-                        <th className="px-5 py-3.5">Resposta</th>
-                        <th className="px-5 py-3.5 text-right">Link</th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
-                      {(
-                        cotacaoSelecionada.cotacao?.participantes || []
-                      ).map((participante) => (
-                        <tr key={participante._id || participante.token}>
-                          <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                            {participante.fornecedor?.empresa ||
-                              participante.fornecedor?.razaoSocial ||
-                              "Fornecedor"}
-                          </td>
-
-                          <td className="px-5 py-4 text-sm text-slate-600">
-                            {participante.email || participante.fornecedor?.email}
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <StatusBadge
-                              status={
-                                participante.emailEnviado
-                                  ? "Enviado"
-                                  : "Pendente"
-                              }
-                            />
-                            {participante.erroEmail && (
-                              <p className="mt-2 max-w-xs text-xs text-red-600">
-                                {participante.erroEmail}
-                              </p>
-                            )}
-                          </td>
-
-                          <td className="px-5 py-4 text-sm text-slate-600">
-                            {participante.visualizadoEm
-                              ? new Date(
-                                  participante.visualizadoEm
-                                ).toLocaleString("pt-BR")
-                              : "Não visualizado"}
-                          </td>
-
-                          <td className="px-5 py-4 text-sm text-slate-600">
-                            {participante.respondeuEm
-                              ? new Date(
-                                  participante.respondeuEm
-                                ).toLocaleString("pt-BR")
-                              : "Aguardando"}
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <div className="flex justify-end">
-                              <ActionButton
-                                title="Copiar link do fornecedor"
-                                icon={Copy}
-                                tone="blue"
-                                onClick={() =>
-                                  copiarLinkCotacao(participante.token)
-                                }
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              <Card>
-                <CardHeader
-                  title="Propostas recebidas"
-                  description="Classificação pelo menor valor total."
-                />
-
-                {(cotacaoSelecionada.propostas || []).length === 0 ? (
-                  <EmptyState
-                    icon={ClipboardList}
-                    title="Nenhuma proposta recebida"
-                    description="Os fornecedores ainda não enviaram valores para esta cotação."
+              {abaCotacao === "visao" && (
+                <Card>
+                  <CardHeader
+                    title="Fornecedores convidados"
+                    description="Situação do envio, visualização e resposta."
                   />
-                ) : (
+
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[900px]">
                       <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
-                          <th className="px-5 py-3.5">Classificação</th>
                           <th className="px-5 py-3.5">Fornecedor</th>
-                          <th className="px-5 py-3.5">Valor total</th>
-                          <th className="px-5 py-3.5">Entrega</th>
-                          <th className="px-5 py-3.5">Validade</th>
-                          <th className="px-5 py-3.5">Status</th>
+                          <th className="px-5 py-3.5">E-mail</th>
+                          <th className="px-5 py-3.5">Envio</th>
+                          <th className="px-5 py-3.5">Visualização</th>
+                          <th className="px-5 py-3.5">Resposta</th>
+                          <th className="px-5 py-3.5 text-right">Link</th>
                         </tr>
                       </thead>
 
                       <tbody className="divide-y divide-slate-100">
-                        {(cotacaoSelecionada.propostas || []).map(
-                          (proposta, index) => (
-                            <tr key={proposta._id}>
-                              <td className="px-5 py-4">
-                                <div
-                                  className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
-                                    index === 0
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-slate-100 text-slate-600"
-                                  }`}
-                                >
-                                  {index + 1}º
-                                </div>
-                              </td>
+                        {(
+                          cotacaoSelecionada.cotacao?.participantes || []
+                        ).map((participante) => (
+                          <tr key={participante._id || participante.token}>
+                            <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                              {participante.fornecedor?.empresa ||
+                                participante.fornecedor?.razaoSocial ||
+                                "Fornecedor"}
+                            </td>
 
-                              <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                                {proposta.fornecedor?.empresa ||
-                                  proposta.fornecedor?.razaoSocial ||
-                                  "Fornecedor"}
-                              </td>
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {participante.email ||
+                                participante.fornecedor?.email ||
+                                "-"}
+                            </td>
 
-                              <td className="px-5 py-4 text-sm font-bold text-slate-900">
-                                {formatarMoeda(
-                                  proposta.valorTotal || proposta.valor
-                                )}
-                              </td>
+                            <td className="px-5 py-4">
+                              <StatusBadge
+                                status={
+                                  participante.emailEnviado
+                                    ? "Enviado"
+                                    : "Pendente"
+                                }
+                              />
+                              {participante.erroEmail && (
+                                <p className="mt-2 max-w-xs text-xs text-red-600">
+                                  {participante.erroEmail}
+                                </p>
+                              )}
+                            </td>
 
-                              <td className="px-5 py-4 text-sm text-slate-600">
-                                {proposta.prazoEntrega || "-"}
-                              </td>
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {participante.visualizadoEm
+                                ? new Date(
+                                    participante.visualizadoEm
+                                  ).toLocaleString("pt-BR")
+                                : "Não visualizado"}
+                            </td>
 
-                              <td className="px-5 py-4 text-sm text-slate-600">
-                                {proposta.validadeDias ||
-                                  proposta.validade ||
-                                  60}{" "}
-                                dias
-                              </td>
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {participante.respondeuEm
+                                ? new Date(
+                                    participante.respondeuEm
+                                  ).toLocaleString("pt-BR")
+                                : "Aguardando"}
+                            </td>
 
-                              <td className="px-5 py-4">
-                                <StatusBadge status={proposta.status} />
-                              </td>
-                            </tr>
-                          )
-                        )}
+                            <td className="px-5 py-4">
+                              <div className="flex justify-end">
+                                <ActionButton
+                                  title="Copiar link do fornecedor"
+                                  icon={Copy}
+                                  tone="blue"
+                                  onClick={() =>
+                                    copiarLinkCotacao(participante.token)
+                                  }
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
-                )}
-              </Card>
+                </Card>
+              )}
+
+              {abaCotacao === "propostas" && (
+                <Card>
+                  <CardHeader
+                    title="Propostas recebidas"
+                    description="Propostas enviadas diretamente pelos fornecedores."
+                  />
+
+                  {(cotacaoSelecionada.propostas || []).length === 0 ? (
+                    <EmptyState
+                      icon={ClipboardList}
+                      title="Nenhuma proposta recebida"
+                      description="Os fornecedores ainda não enviaram valores para esta cotação."
+                    />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[980px]">
+                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-5 py-3.5">Classificação</th>
+                            <th className="px-5 py-3.5">Fornecedor</th>
+                            <th className="px-5 py-3.5">Valor total</th>
+                            <th className="px-5 py-3.5">Entrega</th>
+                            <th className="px-5 py-3.5">Validade</th>
+                            <th className="px-5 py-3.5">Recebida em</th>
+                            <th className="px-5 py-3.5">Status</th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+                          {(cotacaoSelecionada.propostas || []).map(
+                            (proposta, index) => (
+                              <tr key={proposta._id}>
+                                <td className="px-5 py-4">
+                                  <div
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                                      index === 0
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-slate-100 text-slate-600"
+                                    }`}
+                                  >
+                                    {index + 1}º
+                                  </div>
+                                </td>
+
+                                <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                                  {proposta.fornecedor?.empresa ||
+                                    proposta.fornecedor?.razaoSocial ||
+                                    "Fornecedor"}
+                                </td>
+
+                                <td className="px-5 py-4 text-sm font-bold text-slate-900">
+                                  {formatarMoeda(
+                                    proposta.valorTotal || proposta.valor
+                                  )}
+                                </td>
+
+                                <td className="px-5 py-4 text-sm text-slate-600">
+                                  {proposta.prazoEntrega || "-"}
+                                </td>
+
+                                <td className="px-5 py-4 text-sm text-slate-600">
+                                  {proposta.validadeDias ||
+                                    proposta.validade ||
+                                    60}{" "}
+                                  dias
+                                </td>
+
+                                <td className="px-5 py-4 text-sm text-slate-600">
+                                  {proposta.recebidaEm || proposta.createdAt
+                                    ? new Date(
+                                        proposta.recebidaEm ||
+                                          proposta.createdAt
+                                      ).toLocaleString("pt-BR")
+                                    : "-"}
+                                </td>
+
+                                <td className="px-5 py-4">
+                                  <StatusBadge status={proposta.status} />
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {abaCotacao === "julgamento" && (
+                <Card>
+                  <CardHeader
+                    title="Julgamento das propostas"
+                    description="Classifique, desclassifique ou declare a proposta vencedora."
+                  />
+
+                  {(cotacaoSelecionada.propostas || []).length === 0 ? (
+                    <EmptyState
+                      icon={Gavel}
+                      title="Nenhuma proposta para julgar"
+                      description="Aguarde o recebimento das propostas dos fornecedores."
+                    />
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {(cotacaoSelecionada.propostas || []).map(
+                        (proposta, index) => (
+                          <div
+                            key={proposta._id}
+                            className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between"
+                          >
+                            <div className="flex items-start gap-4">
+                              <div
+                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                                  index === 0
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {index + 1}º
+                              </div>
+
+                              <div>
+                                <p className="font-semibold text-slate-900">
+                                  {proposta.fornecedor?.empresa ||
+                                    proposta.fornecedor?.razaoSocial ||
+                                    "Fornecedor"}
+                                </p>
+                                <p className="mt-1 text-xl font-bold text-slate-900">
+                                  {formatarMoeda(
+                                    proposta.valorTotal || proposta.valor
+                                  )}
+                                </p>
+                                <div className="mt-2">
+                                  <StatusBadge status={proposta.status} />
+                                </div>
+                                {proposta.justificativaJulgamento && (
+                                  <p className="mt-2 max-w-2xl text-sm text-red-600">
+                                    {proposta.justificativaJulgamento}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={carregando}
+                                onClick={() =>
+                                  julgarPropostaCotacao(
+                                    proposta._id,
+                                    "Classificada"
+                                  )
+                                }
+                                className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                              >
+                                Classificar
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={carregando}
+                                onClick={() => {
+                                  const motivo = prompt(
+                                    "Informe o motivo da desclassificação:"
+                                  )
+
+                                  if (motivo?.trim()) {
+                                    julgarPropostaCotacao(
+                                      proposta._id,
+                                      "Desclassificada",
+                                      motivo.trim()
+                                    )
+                                  }
+                                }}
+                                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                Desclassificar
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={
+                                  carregando ||
+                                  proposta.status === "Desclassificada"
+                                }
+                                onClick={() =>
+                                  julgarPropostaCotacao(
+                                    proposta._id,
+                                    "Vencedora"
+                                  )
+                                }
+                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Trophy size={16} />
+                                Declarar vencedora
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {abaCotacao === "resultado" && (
+                <Card>
+                  <CardHeader
+                    title="Resultado da cotação"
+                    description="Resultado final definido no julgamento."
+                  />
+
+                  {!cotacaoSelecionada.cotacao?.propostaVencedora ? (
+                    <EmptyState
+                      icon={Trophy}
+                      title="Resultado ainda não definido"
+                      description="Abra a aba Julgamento e declare uma proposta vencedora."
+                    />
+                  ) : (
+                    <div className="p-6">
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+                        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                          <div className="w-fit rounded-xl bg-emerald-600 p-3 text-white">
+                            <Trophy size={26} />
+                          </div>
+
+                          <div className="flex-1">
+                            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                              Proposta vencedora
+                            </p>
+
+                            <h3 className="mt-2 text-xl font-bold text-emerald-950">
+                              {cotacaoSelecionada.cotacao.propostaVencedora
+                                .fornecedor?.empresa ||
+                                cotacaoSelecionada.cotacao.propostaVencedora
+                                  .fornecedor?.razaoSocial ||
+                                "Fornecedor vencedor"}
+                            </h3>
+
+                            <p className="mt-3 text-3xl font-bold text-emerald-700">
+                              {formatarMoeda(
+                                cotacaoSelecionada.cotacao
+                                  .propostaVencedora.valorTotal ||
+                                  cotacaoSelecionada.cotacao
+                                    .propostaVencedora.valor
+                              )}
+                            </p>
+
+                            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                              <div className="rounded-xl bg-white/70 p-4">
+                                <p className="text-xs uppercase text-emerald-700">
+                                  Cotação
+                                </p>
+                                <p className="mt-1 font-semibold text-emerald-950">
+                                  {cotacaoSelecionada.cotacao.numero}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-white/70 p-4">
+                                <p className="text-xs uppercase text-emerald-700">
+                                  Entrega
+                                </p>
+                                <p className="mt-1 font-semibold text-emerald-950">
+                                  {cotacaoSelecionada.cotacao.propostaVencedora
+                                    .prazoEntrega || "-"}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-white/70 p-4">
+                                <p className="text-xs uppercase text-emerald-700">
+                                  Validade
+                                </p>
+                                <p className="mt-1 font-semibold text-emerald-950">
+                                  {cotacaoSelecionada.cotacao.propostaVencedora
+                                    .validadeDias || 60}{" "}
+                                  dias
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
             </div>
           </div>
         </div>
       )}
+
     </>
   )
 
@@ -2748,290 +3112,144 @@ export default function Dashboard() {
   const PropostasPage = (
     <>
       <PageHeader
-        eyebrow="Recebimento das cotações"
-        title="Propostas dos fornecedores"
-        description="Registre, compare e acompanhe as propostas recebidas."
-        actionLabel="Registrar proposta"
-        onAction={() => setMostrarFormProposta(true)}
+        eyebrow="Recepção de propostas"
+        title="Propostas eletrônicas"
+        description="Acompanhe as propostas enviadas pelos fornecedores, seus valores e a situação de cada participação."
+        secondaryAction={
+          <button
+            type="button"
+            onClick={carregarPropostas}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw size={17} />
+            Atualizar propostas
+          </button>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Propostas recebidas"
           value={propostas.length}
-          description="Total registrado"
+          description="Enviadas pelo portal do fornecedor"
           icon={ClipboardList}
           tone="blue"
         />
+
         <MetricCard
           title="Em análise"
-          value={propostas.filter((item) => item.status === "Em análise").length}
-          description="Aguardando julgamento"
+          value={
+            propostas.filter((item) =>
+              ["Recebida", "Em análise", "Pendente"].includes(item.status)
+            ).length
+          }
+          description="Aguardando decisão administrativa"
           icon={Clock3}
           tone="amber"
         />
+
         <MetricCard
-          title="Aprovadas"
-          value={propostas.filter((item) => item.status === "Aprovado").length}
-          description="Propostas habilitadas"
-          icon={CheckCircle2}
+          title="Classificadas"
+          value={
+            propostas.filter((item) =>
+              ["Classificada", "Aprovado", "Vencedora", "Vencedor"].includes(
+                item.status
+              )
+            ).length
+          }
+          description="Aptas para o resultado"
+          icon={BadgeCheck}
           tone="emerald"
         />
+
         <MetricCard
-          title="Menor proposta"
-          value={menorProposta ? formatarMoeda(menorProposta.valor) : "R$ 0,00"}
-          description="Menor valor registrado"
+          title="Menor valor"
+          value={
+            menorProposta
+              ? formatarMoeda(
+                  menorProposta.valorTotal || menorProposta.valor
+                )
+              : "R$ 0,00"
+          }
+          description="Menor proposta recebida"
           icon={CircleDollarSign}
           tone="violet"
         />
       </div>
 
-      {mostrarFormProposta && (
-        <Card className="mt-6">
-          <CardHeader
-            title="Registrar proposta"
-            description="Informe os dados apresentados pelo fornecedor."
-          />
-          <form onSubmit={salvarProposta} className="grid gap-4 p-5 md:grid-cols-2">
-            <Select
-              label="Solicitação *"
-              value={novaProposta.solicitacaoId}
-              onChange={(event) =>
-                setNovaProposta({
-                  ...novaProposta,
-                  solicitacaoId: event.target.value,
-                })
-              }
-            >
-              <option value="">Selecione uma solicitação</option>
-              {solicitacoes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.numero} - {item.fornecedor}
-                </option>
-              ))}
-            </Select>
-
-            <Input
-              label="Valor total da proposta *"
-              type="number"
-              min="0"
-              step="0.01"
-              value={novaProposta.valor}
-              onChange={(event) =>
-                setNovaProposta({
-                  ...novaProposta,
-                  valor: event.target.value,
-                })
-              }
-              placeholder="0,00"
-            />
-
-            <Input
-              label="Validade da proposta (dias)"
-              type="number"
-              min="1"
-              value={novaProposta.validade}
-              onChange={(event) =>
-                setNovaProposta({
-                  ...novaProposta,
-                  validade: event.target.value,
-                })
-              }
-            />
-
-            <Input
-              label="Prazo de entrega"
-              value={novaProposta.prazoEntrega}
-              onChange={(event) =>
-                setNovaProposta({
-                  ...novaProposta,
-                  prazoEntrega: event.target.value,
-                })
-              }
-              placeholder="Ex.: 10 dias úteis"
-            />
-
-            <Textarea
-              label="Observações"
-              className="md:col-span-2"
-              rows="3"
-              value={novaProposta.observacao}
-              onChange={(event) =>
-                setNovaProposta({
-                  ...novaProposta,
-                  observacao: event.target.value,
-                })
-              }
-            />
-
-            <div className="flex gap-3 md:col-span-2 md:justify-end">
-              <button
-                type="button"
-                onClick={() => setMostrarFormProposta(false)}
-                className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                <Save size={17} />
-                Salvar proposta
-              </button>
-            </div>
-          </form>
-        </Card>
-      )}
-
       <Card className="mt-6">
-        <CardHeader
-          title="Propostas registradas"
-          description={`${propostas.length} proposta(s) recebida(s).`}
-        />
+        <div className="border-b border-slate-100 px-5 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Painel de propostas
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Propostas ordenadas pelo menor valor total.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                <span className="h-2 w-2 rounded-full bg-blue-600" />
+                Recebida
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                Classificada
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                <span className="h-2 w-2 rounded-full bg-red-600" />
+                Desclassificada
+              </span>
+            </div>
+          </div>
+        </div>
 
         {propostas.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
-            title="Nenhuma proposta registrada"
-            description="Registre a primeira proposta recebida de um fornecedor."
-            actionLabel="Registrar proposta"
-            onAction={() => setMostrarFormProposta(true)}
+            title="Nenhuma proposta recebida"
+            description="As propostas enviadas pelos fornecedores pelo link da cotação aparecerão automaticamente nesta tela."
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px]">
+            <table className="w-full min-w-[1250px]">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-5 py-3.5">Nº</th>
+                  <th className="px-5 py-3.5">Posição</th>
+                  <th className="px-5 py-3.5">Cotação</th>
                   <th className="px-5 py-3.5">Fornecedor</th>
-                  <th className="px-5 py-3.5">Demanda</th>
-                  <th className="px-5 py-3.5">Valor</th>
-                  <th className="px-5 py-3.5">Validade</th>
+                  <th className="px-5 py-3.5">Valor total</th>
                   <th className="px-5 py-3.5">Entrega</th>
-                  <th className="px-5 py-3.5">Status</th>
+                  <th className="px-5 py-3.5">Validade</th>
+                  <th className="px-5 py-3.5">Recebida em</th>
+                  <th className="px-5 py-3.5">Situação</th>
                   <th className="px-5 py-3.5 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {propostasOrdenadas.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/70">
-                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                      {item.numero}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-700">
-                      {item.fornecedor}
-                    </td>
-                    <td className="px-5 py-4">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {item.demanda}
-                      </p>
-                      <p className="mt-1 max-w-sm truncate text-xs text-slate-500">
-                        {item.objeto}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 text-sm font-bold text-slate-900">
-                      {formatarMoeda(item.valor)}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-600">
-                      {item.validade} dias
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-600">
-                      {item.prazoEntrega || "-"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusBadge status={item.status} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex justify-end gap-2">
-                        <ActionButton title="Visualizar" icon={Eye} />
-                        <ActionButton
-                          title="Excluir"
-                          icon={Trash2}
-                          tone="red"
-                          onClick={() =>
-                            setPropostas((old) =>
-                              old.filter((proposta) => proposta.id !== item.id)
-                            )
-                          }
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-    </>
-  )
 
-  const JulgamentoPage = (
-    <>
-      <PageHeader
-        eyebrow="Análise e classificação"
-        title="Julgamento das propostas"
-        description="Analise os valores, habilite propostas e defina a classificação."
-      />
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <MetricCard
-          title="Propostas para análise"
-          value={propostas.filter((item) => item.status === "Em análise").length}
-          description="Aguardando decisão"
-          icon={Scale}
-          tone="amber"
-        />
-        <MetricCard
-          title="Propostas habilitadas"
-          value={propostas.filter((item) => item.status === "Aprovado").length}
-          description="Aprovadas para classificação"
-          icon={BadgeCheck}
-          tone="emerald"
-        />
-        <MetricCard
-          title="Propostas reprovadas"
-          value={propostas.filter((item) => item.status === "Reprovado").length}
-          description="Desclassificadas no julgamento"
-          icon={CircleX}
-          tone="red"
-        />
-      </div>
-
-      <Card className="mt-6">
-        <CardHeader
-          title="Quadro comparativo"
-          description="As propostas estão ordenadas do menor para o maior valor."
-        />
-
-        {propostas.length === 0 ? (
-          <EmptyState
-            icon={Scale}
-            title="Nenhuma proposta para julgamento"
-            description="Registre propostas para iniciar a análise e classificação."
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1150px]">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3.5">Classificação</th>
-                  <th className="px-5 py-3.5">Fornecedor</th>
-                  <th className="px-5 py-3.5">Demanda</th>
-                  <th className="px-5 py-3.5">Valor</th>
-                  <th className="px-5 py-3.5">Diferença</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Decisão</th>
-                </tr>
-              </thead>
               <tbody className="divide-y divide-slate-100">
                 {propostasOrdenadas.map((item, index) => {
-                  const diferenca =
-                    index === 0 ? 0 : item.valor - propostasOrdenadas[0].valor
+                  const fornecedorNome =
+                    item.fornecedor?.empresa ||
+                    item.fornecedor?.razaoSocial ||
+                    item.fornecedor?.responsavel ||
+                    item.fornecedor ||
+                    "Fornecedor"
+
+                  const cotacaoId =
+                    item.cotacao?._id ||
+                    item.cotacao ||
+                    item.cotacaoId
+
+                  const numeroCotacao =
+                    item.cotacao?.numero ||
+                    item.numeroCotacao ||
+                    "-"
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/70">
+                    <tr key={item._id || item.id} className="hover:bg-slate-50/70">
                       <td className="px-5 py-4">
                         <div
                           className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
@@ -3043,39 +3261,70 @@ export default function Dashboard() {
                           {index + 1}º
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                        {item.fornecedor}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        {item.demanda}
-                      </td>
-                      <td className="px-5 py-4 text-sm font-bold text-slate-900">
-                        {formatarMoeda(item.valor)}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        {diferenca === 0 ? "-" : `+ ${formatarMoeda(diferenca)}`}
-                      </td>
+
                       <td className="px-5 py-4">
-                        <StatusBadge status={item.status} />
+                        <p className="text-sm font-semibold text-slate-900">
+                          {numeroCotacao}
+                        </p>
+                        <p className="mt-1 max-w-[240px] truncate text-xs text-slate-500">
+                          {item.cotacao?.demanda?.objeto ||
+                            item.objeto ||
+                            "Cotação eletrônica"}
+                        </p>
                       </td>
+
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {fornecedorNome}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {item.fornecedor?.email || "-"}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm font-bold text-slate-950">
+                        {formatarMoeda(item.valorTotal || item.valor)}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {item.prazoEntrega || "-"}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {item.validadeDias || item.validade || 60} dias
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {item.recebidaEm || item.createdAt
+                          ? new Date(
+                              item.recebidaEm || item.createdAt
+                            ).toLocaleString("pt-BR")
+                          : "-"}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <StatusBadge status={item.status || "Recebida"} />
+                      </td>
+
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => alterarStatusProposta(item.id, "Aprovado")}
-                            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                          >
-                            <CheckCircle2 size={15} />
-                            Aprovar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => alterarStatusProposta(item.id, "Reprovado")}
-                            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
-                          >
-                            <CircleX size={15} />
-                            Reprovar
-                          </button>
+                          <ActionButton
+                            title="Abrir cotação e visualizar proposta"
+                            icon={Eye}
+                            tone="blue"
+                            onClick={() =>
+                              abrirCotacaoNaAba(cotacaoId, "propostas")
+                            }
+                          />
+
+                          <ActionButton
+                            title="Abrir julgamento"
+                            icon={Gavel}
+                            tone="emerald"
+                            onClick={() =>
+                              abrirCotacaoNaAba(cotacaoId, "julgamento")
+                            }
+                          />
                         </div>
                       </td>
                     </tr>
@@ -3089,147 +3338,457 @@ export default function Dashboard() {
     </>
   )
 
-  const ResultadoPage = (
+  const JulgamentoPage = (
     <>
       <PageHeader
-        eyebrow="Conclusão do processo"
-        title="Resultado e classificação"
-        description="Consulte os vencedores, valores homologados e o resumo final."
+        eyebrow="Julgamento e classificação"
+        title="Sessão de julgamento"
+        description="Analise as propostas por cotação, compare valores e registre a decisão administrativa."
         secondaryAction={
           <button
             type="button"
+            onClick={carregarDados}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <Download size={17} />
-            Exportar relatório
+            <RefreshCw size={17} />
+            Atualizar painel
           </button>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Fornecedor vencedor"
-          value={vencedora?.fornecedor || "Não definido"}
-          description="Proposta aprovada para contratação"
-          icon={Award}
+          title="Cotações com propostas"
+          value={
+            cotacoes.filter((cotacao) =>
+              propostas.some(
+                (proposta) =>
+                  String(proposta.cotacao?._id || proposta.cotacao) ===
+                  String(cotacao._id)
+              )
+            ).length
+          }
+          description="Processos disponíveis para análise"
+          icon={Gavel}
+          tone="blue"
+        />
+
+        <MetricCard
+          title="Aguardando julgamento"
+          value={
+            propostas.filter((item) =>
+              ["Recebida", "Em análise", "Pendente"].includes(item.status)
+            ).length
+          }
+          description="Propostas sem decisão"
+          icon={Clock3}
+          tone="amber"
+        />
+
+        <MetricCard
+          title="Classificadas"
+          value={
+            propostas.filter((item) =>
+              ["Classificada", "Aprovado"].includes(item.status)
+            ).length
+          }
+          description="Propostas habilitadas"
+          icon={CheckCircle2}
           tone="emerald"
         />
+
         <MetricCard
-          title="Valor vencedor"
-          value={vencedora ? formatarMoeda(vencedora.valor) : "R$ 0,00"}
-          description="Valor final homologado"
+          title="Desclassificadas"
+          value={
+            propostas.filter((item) =>
+              ["Desclassificada", "Reprovado"].includes(item.status)
+            ).length
+          }
+          description="Propostas afastadas"
+          icon={CircleX}
+          tone="red"
+        />
+      </div>
+
+      <Card className="mt-6">
+        <CardHeader
+          title="Processos para julgamento"
+          description="Selecione uma cotação para abrir o quadro comparativo completo."
+        />
+
+        {cotacoes.length === 0 ? (
+          <EmptyState
+            icon={Scale}
+            title="Nenhuma cotação disponível"
+            description="Crie uma cotação e aguarde o recebimento das propostas."
+          />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {cotacoes.map((cotacao) => {
+              const propostasCotacao = propostas
+                .filter(
+                  (proposta) =>
+                    String(proposta.cotacao?._id || proposta.cotacao) ===
+                    String(cotacao._id)
+                )
+                .sort(
+                  (a, b) =>
+                    Number(a.valorTotal || a.valor || 0) -
+                    Number(b.valorTotal || b.valor || 0)
+                )
+
+              const menor = propostasCotacao[0]
+              const vencedoraCotacao =
+                cotacao.propostaVencedora ||
+                propostasCotacao.find((item) =>
+                  ["Vencedora", "Vencedor"].includes(item.status)
+                )
+
+              return (
+                <div key={cotacao._id} className="p-5 hover:bg-slate-50/60">
+                  <div className="grid gap-5 xl:grid-cols-[1.5fr_0.8fr_0.8fr_auto] xl:items-center">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-semibold text-slate-900">
+                          {cotacao.numero}
+                        </h3>
+                        <StatusBadge status={cotacao.status || "Aberta"} />
+                      </div>
+
+                      <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                        {cotacao.demanda?.objeto || "Objeto não informado"}
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+                        <span>
+                          Demanda:{" "}
+                          <strong className="text-slate-700">
+                            {cotacao.demanda?.numeroDemanda || "-"}
+                          </strong>
+                        </span>
+                        <span>
+                          Participantes:{" "}
+                          <strong className="text-slate-700">
+                            {cotacao.participantes?.length || 0}
+                          </strong>
+                        </span>
+                        <span>
+                          Respostas:{" "}
+                          <strong className="text-slate-700">
+                            {propostasCotacao.length}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Menor proposta
+                      </p>
+                      <p className="mt-2 text-xl font-bold text-slate-950">
+                        {menor
+                          ? formatarMoeda(menor.valorTotal || menor.valor)
+                          : "R$ 0,00"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Situação
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">
+                        {vencedoraCotacao
+                          ? "Vencedor definido"
+                          : propostasCotacao.length
+                          ? "Em julgamento"
+                          : "Aguardando propostas"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={propostasCotacao.length === 0}
+                      onClick={() =>
+                        abrirCotacaoNaAba(cotacao._id, "julgamento")
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Gavel size={17} />
+                      Abrir julgamento
+                    </button>
+                  </div>
+
+                  {propostasCotacao.length > 0 && (
+                    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full min-w-[850px]">
+                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-4 py-3">Posição</th>
+                            <th className="px-4 py-3">Fornecedor</th>
+                            <th className="px-4 py-3">Valor</th>
+                            <th className="px-4 py-3">Diferença</th>
+                            <th className="px-4 py-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {propostasCotacao.slice(0, 3).map((proposta, index) => {
+                            const valor = Number(
+                              proposta.valorTotal || proposta.valor || 0
+                            )
+                            const menorValor = Number(
+                              menor?.valorTotal || menor?.valor || 0
+                            )
+
+                            return (
+                              <tr key={proposta._id || proposta.id}>
+                                <td className="px-4 py-3 text-sm font-semibold">
+                                  {index + 1}º
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-700">
+                                  {proposta.fornecedor?.empresa ||
+                                    proposta.fornecedor?.razaoSocial ||
+                                    proposta.fornecedor ||
+                                    "Fornecedor"}
+                                </td>
+                                <td className="px-4 py-3 text-sm font-bold text-slate-900">
+                                  {formatarMoeda(valor)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-600">
+                                  {index === 0
+                                    ? "-"
+                                    : `+ ${formatarMoeda(valor - menorValor)}`}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <StatusBadge
+                                    status={proposta.status || "Recebida"}
+                                  />
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+    </>
+  )
+
+  const ResultadoPage = (
+    <>
+      <PageHeader
+        eyebrow="Resultados dos processos"
+        title="Resultados e vencedores"
+        description="Consulte as cotações concluídas, fornecedores vencedores e valores finais."
+        secondaryAction={
+          <button
+            type="button"
+            onClick={carregarDados}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw size={17} />
+            Atualizar resultados
+          </button>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Resultados definidos"
+          value={
+            cotacoes.filter((item) => item.propostaVencedora).length
+          }
+          description="Cotações com vencedor"
+          icon={Trophy}
+          tone="emerald"
+        />
+
+        <MetricCard
+          title="Em julgamento"
+          value={
+            cotacoes.filter(
+              (item) =>
+                !item.propostaVencedora &&
+                propostas.some(
+                  (proposta) =>
+                    String(proposta.cotacao?._id || proposta.cotacao) ===
+                    String(item._id)
+                )
+            ).length
+          }
+          description="Processos com propostas recebidas"
+          icon={Scale}
+          tone="amber"
+        />
+
+        <MetricCard
+          title="Valor homologado"
+          value={formatarMoeda(
+            cotacoes.reduce(
+              (total, item) =>
+                total +
+                Number(
+                  item.propostaVencedora?.valorTotal ||
+                    item.propostaVencedora?.valor ||
+                    0
+                ),
+              0
+            )
+          )}
+          description="Soma dos resultados definidos"
           icon={CircleDollarSign}
           tone="blue"
         />
+
         <MetricCard
-          title="Economia estimada"
+          title="Processos sem resultado"
           value={
-            propostas.length > 1 && vencedora
-              ? formatarMoeda(
-                  Math.max(...propostas.map((item) => item.valor)) - vencedora.valor
-                )
-              : "R$ 0,00"
+            cotacoes.filter((item) => !item.propostaVencedora).length
           }
-          description="Diferença em relação à maior proposta"
-          icon={BarChart3}
+          description="Aguardando conclusão"
+          icon={AlertTriangle}
           tone="violet"
         />
       </div>
 
-      {vencedora ? (
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-          <Card>
-            <CardHeader
-              title="Resultado homologado"
-              description="Resumo da proposta vencedora."
-            />
-            <div className="p-5">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="mb-3 inline-flex rounded-xl bg-emerald-600 p-3 text-white">
-                      <Trophy size={24} />
-                    </div>
-                    <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-                      Proposta vencedora
-                    </p>
-                    <h3 className="mt-2 text-2xl font-bold text-emerald-950">
-                      {vencedora.fornecedor}
-                    </h3>
-                    <p className="mt-2 text-sm text-emerald-800">
-                      Demanda {vencedora.demanda}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-white p-5 text-right shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Valor final
-                    </p>
-                    <p className="mt-2 text-3xl font-bold text-emerald-700">
-                      {formatarMoeda(vencedora.valor)}
-                    </p>
-                  </div>
-                </div>
-              </div>
+      <Card className="mt-6">
+        <CardHeader
+          title="Mapa de resultados"
+          description="Resumo final das cotações e suas respectivas empresas vencedoras."
+        />
 
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase text-slate-500">Validade</p>
-                  <p className="mt-2 font-semibold text-slate-900">
-                    {vencedora.validade} dias
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase text-slate-500">Entrega</p>
-                  <p className="mt-2 font-semibold text-slate-900">
-                    {vencedora.prazoEntrega || "-"}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase text-slate-500">Status</p>
-                  <div className="mt-2">
-                    <StatusBadge status="Vencedor" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Próximas ações"
-              description="Etapas após o resultado."
-            />
-            <div className="space-y-3 p-5">
-              {[
-                ["Gerar relatório final", FileCheck2],
-                ["Comunicar fornecedor", Mail],
-                ["Anexar documentos", Paperclip],
-                ["Arquivar processo", Archive],
-              ].map(([label, Icon]) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-4 text-left transition hover:bg-slate-50"
-                >
-                  <span className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                    <Icon size={18} className="text-blue-600" />
-                    {label}
-                  </span>
-                  <ChevronRight size={17} className="text-slate-400" />
-                </button>
-              ))}
-            </div>
-          </Card>
-        </div>
-      ) : (
-        <Card className="mt-6">
+        {cotacoes.length === 0 ? (
           <EmptyState
             icon={Trophy}
-            title="Resultado ainda não definido"
-            description="Aprove uma proposta na tela de julgamento para gerar o resultado final."
+            title="Nenhum processo encontrado"
+            description="Os resultados serão exibidos após a conclusão do julgamento."
           />
-        </Card>
-      )}
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1250px]">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3.5">Cotação</th>
+                  <th className="px-5 py-3.5">Objeto</th>
+                  <th className="px-5 py-3.5">Vencedor</th>
+                  <th className="px-5 py-3.5">Valor final</th>
+                  <th className="px-5 py-3.5">Entrega</th>
+                  <th className="px-5 py-3.5">Situação</th>
+                  <th className="px-5 py-3.5">Data</th>
+                  <th className="px-5 py-3.5 text-right">Ações</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {cotacoes.map((cotacao) => {
+                  const propostaVencedora = cotacao.propostaVencedora
+
+                  const fornecedorVencedor =
+                    propostaVencedora?.fornecedor?.empresa ||
+                    propostaVencedora?.fornecedor?.razaoSocial ||
+                    propostaVencedora?.fornecedor?.responsavel ||
+                    propostaVencedora?.fornecedor ||
+                    "Não definido"
+
+                  return (
+                    <tr key={cotacao._id} className="hover:bg-slate-50/70">
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {cotacao.numero}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Demanda {cotacao.demanda?.numeroDemanda || "-"}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <p className="max-w-md truncate text-sm text-slate-700">
+                          {cotacao.demanda?.objeto || "-"}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <p
+                          className={`text-sm font-semibold ${
+                            propostaVencedora
+                              ? "text-emerald-700"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {fornecedorVencedor}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm font-bold text-slate-950">
+                        {propostaVencedora
+                          ? formatarMoeda(
+                              propostaVencedora.valorTotal ||
+                                propostaVencedora.valor
+                            )
+                          : "R$ 0,00"}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {propostaVencedora?.prazoEntrega || "-"}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <StatusBadge
+                          status={
+                            propostaVencedora
+                              ? "Resultado definido"
+                              : cotacao.status || "Em andamento"
+                          }
+                        />
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {formatarData(
+                          cotacao.finalizadaEm ||
+                            cotacao.updatedAt ||
+                            cotacao.createdAt
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-2">
+                          <ActionButton
+                            title="Visualizar resultado"
+                            icon={Eye}
+                            tone="blue"
+                            onClick={() =>
+                              abrirCotacaoNaAba(cotacao._id, "resultado")
+                            }
+                          />
+
+                          {!propostaVencedora && (
+                            <ActionButton
+                              title="Abrir julgamento"
+                              icon={Gavel}
+                              tone="emerald"
+                              onClick={() =>
+                                abrirCotacaoNaAba(
+                                  cotacao._id,
+                                  "julgamento"
+                                )
+                              }
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   )
 
@@ -3534,9 +4093,6 @@ export default function Dashboard() {
           {telaAtual === "orcamento" && OrcamentoPage}
           {telaAtual === "solicitacao" && SolicitacoesPage}
           {telaAtual === "fornecedores" && FornecedoresPage}
-          {telaAtual === "propostas" && PropostasPage}
-          {telaAtual === "julgamento" && JulgamentoPage}
-          {telaAtual === "resultado" && ResultadoPage}
           {telaAtual === "arquivos" && ArquivosPage}
         </main>
       </div>
