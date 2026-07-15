@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import CotacaoPublica from "./pages/CotacaoPublica";
 import PrivateRoute from "./routes/PrivateRoute";
 import "./style.css";
 
@@ -17,6 +18,11 @@ export default function App() {
               <Dashboard />
             </PrivateRoute>
           }
+        />
+
+        <Route
+          path="/cotacao/:token"
+          element={<CotacaoPublica />}
         />
       </Routes>
     </BrowserRouter>
