@@ -16,6 +16,7 @@ import orcamentoRoutes from "./routes/orcamentoRoutes.js"
 import cotacaoRoutes from "./routes/cotacaoRoutes.js"
 import propostaRoutes from "./routes/propostaRoutes.js"
 import arquivoRoutes from "./routes/arquivoRoutes.js"
+import sinapiRoutes from "./routes/sinapiRoutes.js"
 
 import { verificarConexaoEmail } from "./services/emailService.js"
 import { finalizarCotacoesExpiradas } from "./services/cotacaoService.js"
@@ -60,6 +61,7 @@ app.use("/api/orcamentos", orcamentoRoutes)
 app.use("/api/cotacoes", cotacaoRoutes)
 app.use("/api/propostas", propostaRoutes)
 app.use("/api/arquivos", arquivoRoutes)
+app.use("/api/sinapi", sinapiRoutes)
 
 mongoose
   .connect(process.env.MONGO_URI)

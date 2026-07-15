@@ -283,6 +283,153 @@ function ActionButton({ title, icon: Icon, onClick, tone = "default" }) {
   )
 }
 
+
+function SinapiSelector({ material, onSelect, onManualChange }) {
+  const [busca, setBusca] = useState(
+    material.codigoSinapi
+      ? `${material.codigoSinapi} - ${material.item}`
+      : material.item || ""
+  )
+  const [resultados, setResultados] = useState([])
+  const [buscando, setBuscando] = useState(false)
+  const [aberto, setAberto] = useState(false)
+
+  useEffect(() => {
+    setBusca(
+      material.codigoSinapi
+        ? `${material.codigoSinapi} - ${material.item}`
+        : material.item || ""
+    )
+  }, [material.codigoSinapi, material.item])
+
+  useEffect(() => {
+    const termo = busca.trim()
+
+    if (termo.length < 2 || material.codigoSinapi) {
+      setResultados([])
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setBuscando(true)
+
+      try {
+        const response = await fetch(
+          `${API_URL}/sinapi?busca=${encodeURIComponent(termo)}&limite=20`,
+          {
+            headers: authHeaders(),
+            signal: controller.signal,
+          }
+        )
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.erro || "Erro ao pesquisar itens SINAPI.")
+        }
+
+        setResultados(Array.isArray(data.itens) ? data.itens : [])
+        setAberto(true)
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Erro ao pesquisar SINAPI:", error)
+          setResultados([])
+        }
+      } finally {
+        setBuscando(false)
+      }
+    }, 350)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [busca, material.codigoSinapi])
+
+  function alterarBusca(valor) {
+    setBusca(valor)
+    setAberto(true)
+
+    if (material.codigoSinapi) {
+      onManualChange(valor)
+    } else {
+      onManualChange(valor)
+    }
+  }
+
+  return (
+    <label className="relative grid gap-2 text-sm font-medium text-slate-700">
+      Item SINAPI ou descrição manual *
+
+      <div className="relative">
+        <Search
+          size={17}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+
+        <input
+          value={busca}
+          onChange={(event) => alterarBusca(event.target.value)}
+          onFocus={() => setAberto(true)}
+          placeholder="Digite o código ou descrição SINAPI"
+          className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-10 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        />
+
+        {buscando && (
+          <Loader2
+            size={17}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin text-blue-600"
+          />
+        )}
+      </div>
+
+      {aberto && resultados.length > 0 && (
+        <div className="absolute left-0 right-0 top-[74px] z-50 max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+          {resultados.map((item) => (
+            <button
+              key={item._id || `${item.tipo}-${item.codigo}`}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onSelect(item)
+                setAberto(false)
+                setResultados([])
+              }}
+              className="block w-full border-b border-slate-100 px-4 py-3 text-left transition last:border-0 hover:bg-blue-50"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                    {item.tipo === "COMPOSICAO" ? "Composição" : "Insumo"} · {item.codigo}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold leading-5 text-slate-900">
+                    {item.descricao}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Unidade: {item.unidade} · PR · Referência {item.referencia}
+                  </p>
+                </div>
+
+                <strong className="shrink-0 text-sm text-emerald-700">
+                  {formatarMoeda(item.preco)}
+                </strong>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {material.codigoSinapi && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          <strong>SINAPI {material.codigoSinapi}</strong> · {material.tipoSinapi} ·
+          preço PR {formatarMoeda(material.valorSinapi)} por {material.unidade}
+        </div>
+      )}
+    </label>
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const user = JSON.parse(localStorage.getItem("user") || "{}")
@@ -365,6 +512,11 @@ export default function Dashboard() {
       quantidade: "",
       unidade: "",
       observacao: "",
+      codigoSinapi: "",
+      tipoSinapi: "",
+      valorSinapi: 0,
+      referenciaSinapi: "",
+      fonteSinapi: "",
     },
   ])
 
@@ -791,6 +943,11 @@ export default function Dashboard() {
         quantidade: "",
         unidade: "",
         observacao: "",
+        codigoSinapi: "",
+        tipoSinapi: "",
+        valorSinapi: 0,
+        referenciaSinapi: "",
+        fonteSinapi: "",
       },
     ])
   }
@@ -802,6 +959,44 @@ export default function Dashboard() {
   function alterarItem(id, campo, valor) {
     setMateriais((old) =>
       old.map((item) => (item.id === id ? { ...item, [campo]: valor } : item))
+    )
+  }
+
+
+  function selecionarItemSinapi(id, itemSinapi) {
+    setMateriais((old) =>
+      old.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              item: itemSinapi.descricao,
+              unidade: itemSinapi.unidade,
+              codigoSinapi: itemSinapi.codigo,
+              tipoSinapi: itemSinapi.tipo,
+              valorSinapi: Number(itemSinapi.preco || 0),
+              referenciaSinapi: itemSinapi.referencia || "05/2026",
+              fonteSinapi: "SINAPI",
+            }
+          : item
+      )
+    )
+  }
+
+  function alterarDescricaoManualSinapi(id, valor) {
+    setMateriais((old) =>
+      old.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              item: valor,
+              codigoSinapi: "",
+              tipoSinapi: "",
+              valorSinapi: 0,
+              referenciaSinapi: "",
+              fonteSinapi: "",
+            }
+          : item
+      )
     )
   }
 
@@ -848,7 +1043,18 @@ export default function Dashboard() {
       })
 
       setMateriais([
-        { id: 1, item: "", quantidade: "", unidade: "", observacao: "" },
+        {
+          id: 1,
+          item: "",
+          quantidade: "",
+          unidade: "",
+          observacao: "",
+          codigoSinapi: "",
+          tipoSinapi: "",
+          valorSinapi: 0,
+          referenciaSinapi: "",
+          fonteSinapi: "",
+        },
       ])
 
       abrirTela("painel")
@@ -1152,6 +1358,13 @@ export default function Dashboard() {
     const valorUnitario = Number(valoresOrcamento[index] || 0)
     return total + quantidade * valorUnitario
   }, 0)
+
+  const totalReferenciaSinapi = materiais.reduce(
+    (total, item) =>
+      total +
+      Number(item.quantidade || 0) * Number(item.valorSinapi || 0),
+    0
+  )
 
   const propostasOrdenadas = [...propostas].sort(
     (a, b) =>
@@ -1690,13 +1903,14 @@ export default function Dashboard() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Input
-                      label="Material *"
-                      value={material.item}
-                      onChange={(event) =>
-                        alterarItem(material.id, "item", event.target.value)
+                    <SinapiSelector
+                      material={material}
+                      onSelect={(itemSinapi) =>
+                        selecionarItemSinapi(material.id, itemSinapi)
                       }
-                      placeholder="Ex.: Cimento CP II"
+                      onManualChange={(valor) =>
+                        alterarDescricaoManualSinapi(material.id, valor)
+                      }
                     />
                     <Input
                       label="Quantidade *"
@@ -1734,6 +1948,32 @@ export default function Dashboard() {
                       placeholder="Detalhes técnicos do item"
                     />
                   </div>
+
+                  {material.codigoSinapi && (
+                    <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs uppercase text-emerald-700">Preço unitário SINAPI</p>
+                        <p className="mt-1 font-bold text-emerald-900">
+                          {formatarMoeda(material.valorSinapi)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase text-emerald-700">Quantidade</p>
+                        <p className="mt-1 font-bold text-emerald-900">
+                          {Number(material.quantidade || 0)} {material.unidade}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase text-emerald-700">Total de referência</p>
+                        <p className="mt-1 font-bold text-emerald-900">
+                          {formatarMoeda(
+                            Number(material.quantidade || 0) *
+                              Number(material.valorSinapi || 0)
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1752,6 +1992,18 @@ export default function Dashboard() {
               </p>
               <p className="mt-2 text-3xl font-bold text-slate-950">
                 {materiais.length}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                Total de referência SINAPI PR
+              </p>
+              <p className="mt-2 text-2xl font-bold text-emerald-800">
+                {formatarMoeda(totalReferenciaSinapi)}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700">
+                Referência 05/2026 · sem encargos sociais
               </p>
             </div>
 
