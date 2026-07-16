@@ -18,6 +18,12 @@ import propostaRoutes from "./routes/propostaRoutes.js"
 import arquivoRoutes from "./routes/arquivoRoutes.js"
 import sinapiRoutes from "./routes/sinapiRoutes.js"
 
+import adminRoutes from "./routes/adminRoutes.js"
+import fornecedorAuthRoutes from "./routes/fornecedorAuthRoutes.js"
+import empenhoRoutes from "./routes/empenhoRoutes.js"
+import fornecedorPortalRoutes from "./routes/fornecedorPortalRoutes.js"
+import chatResultadoRoutes from "./routes/chatResultadoRoutes.js"
+
 import { verificarConexaoEmail } from "./services/emailService.js"
 import { finalizarCotacoesExpiradas } from "./services/cotacaoService.js"
 
@@ -62,6 +68,12 @@ app.use("/api/cotacoes", cotacaoRoutes)
 app.use("/api/propostas", propostaRoutes)
 app.use("/api/arquivos", arquivoRoutes)
 app.use("/api/sinapi", sinapiRoutes)
+
+app.use("/api/admin", adminRoutes)
+app.use("/api/fornecedor-auth", fornecedorAuthRoutes)
+app.use("/api/empenhos", empenhoRoutes)
+app.use("/api/fornecedor", fornecedorPortalRoutes)
+app.use("/api/chats", chatResultadoRoutes)
 
 mongoose
   .connect(process.env.MONGO_URI)

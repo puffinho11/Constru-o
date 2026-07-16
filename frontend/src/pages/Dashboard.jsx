@@ -51,7 +51,14 @@ import {
   Archive,
   Copy,
   ExternalLink,
+  UserCog,
+  ReceiptText,
+  MessageCircle,
 } from "lucide-react"
+
+import AdminUsuariosPage from "../components/AdminUsuariosPage"
+import EmpenhosAdminPage from "../components/EmpenhosAdminPage"
+import ResultadoChatModal from "../components/ResultadoChatModal"
 
 const API_URL = "http://localhost:5000/api"
 
@@ -146,6 +153,17 @@ function PageHeader({ eyebrow, title, description, actionLabel, onAction, second
           </button>
         )}
       </div>
+
+      {chatResultado && (
+        <ResultadoChatModal
+          apiUrl={API_URL}
+          authHeaders={authHeaders}
+          cotacaoId={chatResultado.cotacaoId}
+          titulo={`Chat do resultado ${chatResultado.numero}`}
+          subtitulo={chatResultado.fornecedor}
+          onClose={() => setChatResultado(null)}
+        />
+      )}
     </div>
   )
 }
@@ -489,6 +507,7 @@ export default function Dashboard() {
   })
 
   const [mostrarFormArquivo, setMostrarFormArquivo] = useState(false)
+  const [chatResultado, setChatResultado] = useState(null)
   const [novoArquivo, setNovoArquivo] = useState({
     nome: "",
     tipo: "Documento",
@@ -530,6 +549,8 @@ export default function Dashboard() {
     { id: "propostas", nome: "Propostas", icon: ClipboardList },
     { id: "julgamento", nome: "Julgamento", icon: Scale },
     { id: "resultado", nome: "Resultados", icon: Trophy },
+    { id: "empenhos", nome: "Empenhos", icon: ReceiptText },
+    { id: "administracao", nome: "Administração", icon: UserCog },
     { id: "arquivos", nome: "Arquivos", icon: FolderOpen },
   ]
 
@@ -4107,6 +4128,21 @@ export default function Dashboard() {
                             }
                           />
 
+                          {propostaVencedora && (
+                            <ActionButton
+                              title="Abrir chat do resultado"
+                              icon={MessageCircle}
+                              tone="emerald"
+                              onClick={() =>
+                                setChatResultado({
+                                  cotacaoId: cotacao._id,
+                                  numero: cotacao.numero,
+                                  fornecedor: fornecedorVencedor,
+                                })
+                              }
+                            />
+                          )}
+
                           {!propostaVencedora && (
                             <ActionButton
                               title="Abrir julgamento"
@@ -4437,9 +4473,37 @@ export default function Dashboard() {
           {telaAtual === "propostas" && PropostasPage}
           {telaAtual === "julgamento" && JulgamentoPage}
           {telaAtual === "resultado" && ResultadoPage}
+          {telaAtual === "empenhos" && (
+            <EmpenhosAdminPage
+              apiUrl={API_URL}
+              authHeaders={authHeaders}
+              cotacoes={cotacoes}
+              formatarMoeda={formatarMoeda}
+              formatarData={formatarData}
+              StatusBadge={StatusBadge}
+            />
+          )}
+          {telaAtual === "administracao" && (
+            <AdminUsuariosPage
+              apiUrl={API_URL}
+              authHeaders={authHeaders}
+              fornecedores={fornecedores}
+            />
+          )}
           {telaAtual === "arquivos" && ArquivosPage}
         </main>
       </div>
+
+      {chatResultado && (
+        <ResultadoChatModal
+          apiUrl={API_URL}
+          authHeaders={authHeaders}
+          cotacaoId={chatResultado.cotacaoId}
+          titulo={`Chat do resultado ${chatResultado.numero}`}
+          subtitulo={chatResultado.fornecedor}
+          onClose={() => setChatResultado(null)}
+        />
+      )}
     </div>
   )
 }
