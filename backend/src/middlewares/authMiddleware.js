@@ -1,28 +1,69 @@
-import jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken"
 
-export const authMiddleware = (req, res, next) => {
+export function authMiddleware(req, res, next) {
   try {
-    const token = req.headers.authorization;
+    const authorization = req.headers.authorization || ""
 
-    if (!token) {
+    if (!authorization) {
       return res.status(401).json({
-        message: "Token não informado",
-      });
+        erro: "Token não informado.",
+      })
     }
 
-    const tokenFormatado = token.replace("Bearer ", "");
+    const partes = authorization.split(" ")
+
+    if (
+      partes.length !== 2 ||
+      partes[0].toLowerCase() !== "bearer" ||
+      !partes[1]
+    ) {
+      return res.status(401).json({
+        erro: "Formato do token inválido.",
+      })
+    }
+
+    const token = partes[1]
 
     const decoded = jwt.verify(
-      tokenFormatado,
+      token,
       process.env.JWT_SECRET
-    );
+    )
 
-    req.user = decoded;
+    req.user = {
+      ...decoded,
 
-    next();
+      id:
+        decoded.id ||
+        decoded._id ||
+        decoded.userId,
+
+      nome:
+        decoded.nome ||
+        decoded.name ||
+        "Usuário",
+
+      perfil:
+        decoded.perfil ||
+        (decoded.role === "admin"
+          ? "Administrador"
+          : decoded.role),
+
+      role:
+        decoded.role ||
+        (decoded.perfil === "Administrador"
+          ? "admin"
+          : "user"),
+    }
+
+    return next()
   } catch (error) {
+    console.error(
+      "Erro na autenticação:",
+      error.message
+    )
+
     return res.status(401).json({
-      message: "Token inválido",
-    });
+      erro: "Token inválido ou expirado.",
+    })
   }
-};
+}

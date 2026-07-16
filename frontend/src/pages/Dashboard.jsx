@@ -154,16 +154,6 @@ function PageHeader({ eyebrow, title, description, actionLabel, onAction, second
         )}
       </div>
 
-      {chatResultado && (
-        <ResultadoChatModal
-          apiUrl={API_URL}
-          authHeaders={authHeaders}
-          cotacaoId={chatResultado.cotacaoId}
-          titulo={`Chat do resultado ${chatResultado.numero}`}
-          subtitulo={chatResultado.fornecedor}
-          onClose={() => setChatResultado(null)}
-        />
-      )}
     </div>
   )
 }
@@ -4495,15 +4485,15 @@ export default function Dashboard() {
       </div>
 
       {chatResultado && (
-        <ResultadoChatModal
-          apiUrl={API_URL}
-          authHeaders={authHeaders}
-          cotacaoId={chatResultado.cotacaoId}
-          titulo={`Chat do resultado ${chatResultado.numero}`}
-          subtitulo={chatResultado.fornecedor}
-          onClose={() => setChatResultado(null)}
-        />
-      )}
+  <ResultadoChatModal
+    apiUrl={API_URL}
+    authHeaders={authHeaders}
+    cotacaoId={chatResultado.cotacaoId}
+    titulo={`Chat do resultado ${chatResultado.numero}`}
+    subtitulo={chatResultado.fornecedor}
+    onClose={() => setChatResultado(null)}
+  />
+)}
     </div>
   )
 }

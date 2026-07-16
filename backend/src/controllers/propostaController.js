@@ -20,7 +20,11 @@ export async function enviarPropostaPublica(req, res) {
   try {
     const cotacao = await Cotacao.findOne({
       "participantes.token": req.params.token,
-    }).populate("demanda")
+    }).populate({
+      path: "demanda",
+      select:
+        "numeroDemanda objeto secretaria justificativa materiais",
+    })
 
     if (!cotacao) {
       return res.status(404).json({
@@ -79,69 +83,114 @@ export async function enviarPropostaPublica(req, res) {
 
     if (itens.length !== materiaisDemanda.length) {
       return res.status(400).json({
-        erro: "A quantidade de itens enviados não corresponde à demanda.",
+        erro:
+          "A quantidade de itens enviados não corresponde à demanda.",
       })
     }
 
-    const itensTratados = materiaisDemanda.map((material, index) => {
-      const valorUnitario = Number(itens[index]?.valorUnitario)
-
-      if (!Number.isFinite(valorUnitario) || valorUnitario < 0) {
-        throw new Error(
-          `Valor unitário inválido no item ${index + 1}.`
+    const itensTratados = materiaisDemanda.map(
+      (material, index) => {
+        const valorUnitario = Number(
+          itens[index]?.valorUnitario
         )
-      }
 
-      const quantidade = Number(material.quantidade || 0)
+        if (
+          !Number.isFinite(valorUnitario) ||
+          valorUnitario < 0
+        ) {
+          throw new Error(
+            `Valor unitário inválido no item ${index + 1}.`
+          )
+        }
 
-      return {
-        material: material.item || material.material,
-        quantidade,
-        unidade: material.unidade,
-        observacao: material.observacao || "",
-        valorUnitario,
-        valorTotal: Number(
-          (quantidade * valorUnitario).toFixed(2)
-        ),
+        const quantidade = Number(
+          material.quantidade || 0
+        )
+
+        return {
+          material:
+            material.item ||
+            material.material,
+          quantidade,
+          unidade:
+            material.unidade,
+          observacao:
+            material.observacao ||
+            "",
+          valorUnitario,
+          valorTotal: Number(
+            (
+              quantidade *
+              valorUnitario
+            ).toFixed(2)
+          ),
+        }
       }
-    })
+    )
 
     const valorTotal = Number(
       itensTratados
-        .reduce((total, item) => total + item.valorTotal, 0)
+        .reduce(
+          (total, item) =>
+            total + item.valorTotal,
+          0
+        )
         .toFixed(2)
     )
 
     const proposta = await Proposta.create({
-      numero: await gerarNumeroProposta(),
-      cotacao: cotacao._id,
-      demanda: cotacao.demanda._id,
-      fornecedor: participante.fornecedor,
-      participanteToken: req.params.token,
-      itens: itensTratados,
+      numero:
+        await gerarNumeroProposta(),
+      cotacao:
+        cotacao._id,
+      fornecedor:
+        participante.fornecedor,
+      participanteToken:
+        req.params.token,
+      itens:
+        itensTratados,
+      valorReferenciaSinapi:
+        valorTotal,
+      percentualDesconto:
+        0,
       valorTotal,
-      prazoEntrega: prazoEntrega || "",
-      validadeDias: Number(validadeDias || 60),
-      observacao: observacao || "",
-      status: "Recebida",
+      prazoEntrega:
+        prazoEntrega || "",
+      validadeDias:
+        Number(validadeDias || 60),
+      observacao:
+        observacao || "",
+      status:
+        "Recebida",
     })
 
-    participante.respondeuEm = new Date()
+    participante.respondidoEm =
+      new Date()
+
     await cotacao.save()
 
     return res.status(201).json({
-      mensagem: "Proposta enviada com sucesso.",
+      mensagem:
+        "Proposta enviada com sucesso.",
       proposta: {
-        numero: proposta.numero,
-        valorTotal: proposta.valorTotal,
-        recebidaEm: proposta.recebidaEm,
+        numero:
+          proposta.numero,
+        valorTotal:
+          proposta.valorTotal,
+        recebidaEm:
+          proposta.createdAt,
       },
     })
   } catch (error) {
-    console.error(error)
+    console.error(
+      "Erro ao enviar proposta:",
+      error
+    )
 
     return res.status(500).json({
-      erro: error.message || "Erro ao enviar a proposta.",
+      erro:
+        error.message ||
+        "Erro ao enviar a proposta.",
     })
   }
 }
@@ -151,25 +200,49 @@ export async function listarPropostas(req, res) {
     const filtro = {}
 
     if (req.query.cotacaoId) {
-      filtro.cotacao = req.query.cotacaoId
+      filtro.cotacao =
+        req.query.cotacaoId
     }
 
-    const propostas = await Proposta.find(filtro)
-      .populate("cotacao")
-      .populate("demanda")
-      .populate("fornecedor")
-      .populate("julgadaPor", "nome email")
-      .sort({
-        valorTotal: 1,
-        recebidaEm: 1,
-      })
+    const propostas =
+      await Proposta.find(filtro)
+        .populate({
+          path: "cotacao",
+          populate: {
+            path: "demanda",
+            select:
+              "numeroDemanda objeto secretaria justificativa materiais",
+          },
+        })
+        .populate({
+          path: "fornecedor",
+          select:
+            "empresa razaoSocial email cnpj responsavel telefone cidade",
+        })
+        .populate({
+          path: "julgadaPor",
+          select:
+            "nome email perfil role",
+        })
+        .sort({
+          valorTotal: 1,
+          createdAt: 1,
+        })
 
-    return res.json(propostas)
+    return res
+      .status(200)
+      .json(propostas)
   } catch (error) {
-    console.error(error)
+    console.error(
+      "Erro ao listar propostas:",
+      error
+    )
 
     return res.status(500).json({
-      erro: "Erro ao listar propostas.",
+      erro:
+        "Erro ao listar propostas.",
+      detalhe:
+        error.message,
     })
   }
 }
@@ -187,79 +260,128 @@ export async function julgarProposta(req, res) {
       "Vencedora",
     ]
 
-    if (!statusPermitidos.includes(status)) {
+    if (
+      !statusPermitidos.includes(
+        status
+      )
+    ) {
       return res.status(400).json({
-        erro: "Status de julgamento inválido.",
+        erro:
+          "Status de julgamento inválido.",
       })
     }
 
-    const proposta = await Proposta.findById(req.params.id)
+    const proposta =
+      await Proposta.findById(
+        req.params.id
+      )
 
     if (!proposta) {
       return res.status(404).json({
-        erro: "Proposta não encontrada.",
+        erro:
+          "Proposta não encontrada.",
       })
     }
 
-    if (status === "Vencedora") {
+    if (
+      status ===
+      "Vencedora"
+    ) {
       await Proposta.updateMany(
         {
-          cotacao: proposta.cotacao,
+          cotacao:
+            proposta.cotacao,
           _id: {
-            $ne: proposta._id,
+            $ne:
+              proposta._id,
           },
-          status: "Vencedora",
+          status:
+            "Vencedora",
         },
         {
-          status: "Classificada",
+          status:
+            "Classificada",
         }
       )
 
-      await Cotacao.findByIdAndUpdate(proposta.cotacao, {
-        propostaVencedora: proposta._id,
-        status: "Finalizada",
-        finalizadaEm: new Date(),
-      })
+      await Cotacao.findByIdAndUpdate(
+        proposta.cotacao,
+        {
+          propostaVencedora:
+            proposta._id,
+          status:
+            "Finalizada",
+          finalizadaEm:
+            new Date(),
+        }
+      )
     }
 
-    proposta.status = status
-    proposta.justificativaJulgamento = justificativa || ""
-    proposta.julgadaEm = new Date()
-    proposta.julgadaPor = req.user?._id || req.user?.id || null
+    proposta.status =
+      status
+
+    proposta.justificativaJulgamento =
+      justificativa || ""
+
+    proposta.julgadaEm =
+      new Date()
+
+    proposta.julgadaPor =
+      req.user?._id ||
+      req.user?.id ||
+      null
 
     await proposta.save()
 
-    return res.json({
-      mensagem: "Julgamento salvo.",
+    return res.status(200).json({
+      mensagem:
+        "Julgamento salvo.",
       proposta,
     })
   } catch (error) {
-    console.error(error)
+    console.error(
+      "Erro ao julgar proposta:",
+      error
+    )
 
     return res.status(500).json({
-      erro: "Erro ao julgar proposta.",
+      erro:
+        "Erro ao julgar proposta.",
+      detalhe:
+        error.message,
     })
   }
 }
 
 export async function excluirProposta(req, res) {
   try {
-    const proposta = await Proposta.findByIdAndDelete(req.params.id)
+    const proposta =
+      await Proposta.findByIdAndDelete(
+        req.params.id
+      )
 
     if (!proposta) {
       return res.status(404).json({
-        erro: "Proposta não encontrada.",
+        erro:
+          "Proposta não encontrada.",
       })
     }
 
-    return res.json({
-      mensagem: "Proposta excluída.",
+    return res.status(200).json({
+      mensagem:
+        "Proposta excluída.",
     })
   } catch (error) {
-    console.error(error)
+    console.error(
+      "Erro ao excluir proposta:",
+      error
+    )
 
     return res.status(500).json({
-      erro: "Erro ao excluir proposta.",
+      erro:
+        "Erro ao excluir proposta.",
+      detalhe:
+        error.message,
     })
   }
 }
