@@ -6,6 +6,7 @@ import helmet from "helmet"
 import rateLimit from "express-rate-limit"
 import morgan from "morgan"
 import cookieParser from "cookie-parser"
+import path from "path"
 
 import authRoutes from "./routes/authRoutes.js"
 import secretariaRoutes from "./routes/secretariaRoutes.js"
@@ -14,6 +15,7 @@ import fornecedorRoutes from "./routes/fornecedorRoutes.js"
 import orcamentoRoutes from "./routes/orcamentoRoutes.js"
 
 import cotacaoRoutes from "./routes/cotacaoRoutes.js"
+import cotacaoChatRoutes from "./routes/cotacaoChatRoutes.js"
 import propostaRoutes from "./routes/propostaRoutes.js"
 import arquivoRoutes from "./routes/arquivoRoutes.js"
 import sinapiRoutes from "./routes/sinapiRoutes.js"
@@ -32,11 +34,20 @@ dotenv.config()
 const app = express()
 
 app.use(express.json({ limit: "10mb" }))
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb",
+  })
+)
+
 app.use(cookieParser())
 
 app.use(
   cors({
-    origin: process.env.FRONT_URL || "http://localhost:5173",
+    origin:
+      process.env.FRONT_URL ||
+      "http://localhost:5173",
     credentials: true,
   })
 )
@@ -47,33 +58,118 @@ app.use(morgan("dev"))
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
-  message: "Muitas requisições. Tente novamente mais tarde.",
+  message:
+    "Muitas requisições. Tente novamente mais tarde.",
 })
 
 app.use(limiter)
 
+app.use(
+  "/uploads",
+  express.static(path.resolve("uploads"))
+)
+
 app.get("/", (req, res) => {
-  res.json({
-    mensagem: "API do Sistema de Compras funcionando.",
+  return res.json({
+    mensagem:
+      "API do Sistema de Compras funcionando.",
   })
 })
 
 app.use("/api/auth", authRoutes)
-app.use("/api/secretarias", secretariaRoutes)
-app.use("/api/demandas", demandaRoutes)
-app.use("/api/fornecedores", fornecedorRoutes)
-app.use("/api/orcamentos", orcamentoRoutes)
 
-app.use("/api/cotacoes", cotacaoRoutes)
-app.use("/api/propostas", propostaRoutes)
-app.use("/api/arquivos", arquivoRoutes)
-app.use("/api/sinapi", sinapiRoutes)
+app.use(
+  "/api/secretarias",
+  secretariaRoutes
+)
 
-app.use("/api/admin", adminRoutes)
-app.use("/api/fornecedor-auth", fornecedorAuthRoutes)
-app.use("/api/empenhos", empenhoRoutes)
-app.use("/api/fornecedor", fornecedorPortalRoutes)
-app.use("/api/chats", chatResultadoRoutes)
+app.use(
+  "/api/demandas",
+  demandaRoutes
+)
+
+app.use(
+  "/api/fornecedores",
+  fornecedorRoutes
+)
+
+app.use(
+  "/api/orcamentos",
+  orcamentoRoutes
+)
+
+app.use(
+  "/api/cotacoes",
+  cotacaoRoutes
+)
+
+app.use(
+  "/api/cotacoes",
+  cotacaoChatRoutes
+)
+
+app.use(
+  "/api/propostas",
+  propostaRoutes
+)
+
+app.use(
+  "/api/arquivos",
+  arquivoRoutes
+)
+
+app.use(
+  "/api/sinapi",
+  sinapiRoutes
+)
+
+app.use(
+  "/api/admin",
+  adminRoutes
+)
+
+app.use(
+  "/api/fornecedor-auth",
+  fornecedorAuthRoutes
+)
+
+app.use(
+  "/api/empenhos",
+  empenhoRoutes
+)
+
+app.use(
+  "/api/fornecedor",
+  fornecedorPortalRoutes
+)
+
+app.use(
+  "/api/chats",
+  chatResultadoRoutes
+)
+
+app.use((req, res) => {
+  return res.status(404).json({
+    erro: "Rota não encontrada.",
+    metodo: req.method,
+    rota: req.originalUrl,
+  })
+})
+
+app.use((error, req, res, next) => {
+  console.error(
+    "Erro não tratado:",
+    error
+  )
+
+  return res
+    .status(error.status || 500)
+    .json({
+      erro:
+        error.message ||
+        "Erro interno do servidor.",
+    })
+})
 
 mongoose
   .connect(process.env.MONGO_URI)
@@ -83,14 +179,20 @@ mongoose
     try {
       await verificarConexaoEmail()
     } catch (error) {
-      console.error("Erro ao verificar servidor de e-mail:", error.message)
+      console.error(
+        "Erro ao verificar servidor de e-mail:",
+        error.message
+      )
     }
 
     try {
-      const total = await finalizarCotacoesExpiradas()
+      const total =
+        await finalizarCotacoesExpiradas()
 
       if (total > 0) {
-        console.log(`${total} cotação(ões) expirada(s) finalizada(s).`)
+        console.log(
+          `${total} cotação(ões) expirada(s) finalizada(s).`
+        )
       }
     } catch (error) {
       console.error(
@@ -101,10 +203,13 @@ mongoose
 
     setInterval(async () => {
       try {
-        const total = await finalizarCotacoesExpiradas()
+        const total =
+          await finalizarCotacoesExpiradas()
 
         if (total > 0) {
-          console.log(`${total} cotação(ões) expirada(s) finalizada(s).`)
+          console.log(
+            `${total} cotação(ões) expirada(s) finalizada(s).`
+          )
         }
       } catch (error) {
         console.error(
@@ -114,12 +219,18 @@ mongoose
       }
     }, 60 * 1000)
 
-    const port = process.env.PORT || 5000
+    const port =
+      process.env.PORT || 5000
 
     app.listen(port, () => {
-      console.log(`Servidor rodando na porta ${port}`)
+      console.log(
+        `Servidor rodando na porta ${port}`
+      )
     })
   })
   .catch((error) => {
-    console.error("Erro ao conectar no MongoDB:", error)
+    console.error(
+      "Erro ao conectar no MongoDB:",
+      error
+    )
   })

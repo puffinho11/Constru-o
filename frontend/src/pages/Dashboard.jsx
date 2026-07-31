@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   LayoutDashboard,
@@ -58,7 +58,542 @@ import {
 
 import AdminUsuariosPage from "../components/AdminUsuariosPage"
 import EmpenhosAdminPage from "../components/EmpenhosAdminPage"
-import ResultadoChatModal from "../components/ResultadoChatModal"
+
+function dataHora(valor) {
+  if (!valor) return ""
+  return new Date(valor).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
+function nomeArquivo(url = "") {
+  try {
+    return decodeURIComponent(url.split("/").pop() || "arquivo")
+  } catch {
+    return "arquivo"
+  }
+}
+
+function ResultadoChatModal({
+  cotacaoId,
+  titulo = "Chat da cotação",
+  subtitulo = "",
+  onClose,
+}) {
+  const usuario = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}")
+    } catch {
+      return {}
+    }
+  }, [])
+
+  const fornecedorLogado =
+    String(usuario?.role || "").toLowerCase() === "fornecedor" ||
+    String(usuario?.tipo || "").toLowerCase() === "fornecedor" ||
+    String(usuario?.perfil || "").toLowerCase() === "fornecedor"
+
+  const [fornecedores, setFornecedores] = useState([])
+  const [fornecedorSelecionado, setFornecedorSelecionado] = useState("")
+  const [tipoChat, setTipoChat] = useState("privado")
+  const [mensagens, setMensagens] = useState([])
+  const [texto, setTexto] = useState("")
+  const [arquivo, setArquivo] = useState(null)
+  const [busca, setBusca] = useState("")
+  const [carregando, setCarregando] = useState(true)
+  const [enviando, setEnviando] = useState(false)
+  const fimRef = useRef(null)
+
+  const fornecedoresFiltrados = fornecedores.filter((item) =>
+    String(
+      item.empresa ||
+        item.razaoSocial ||
+        item.nomeFantasia ||
+        item.responsavel ||
+        item.email ||
+        ""
+    )
+      .toLowerCase()
+      .includes(busca.toLowerCase().trim())
+  )
+
+  useEffect(() => {
+    carregarFornecedores()
+  }, [cotacaoId])
+
+  useEffect(() => {
+    if (
+      tipoChat === "privado" &&
+      !fornecedorSelecionado &&
+      !fornecedorLogado
+    ) {
+      return
+    }
+
+    carregarMensagens()
+
+    const timer = setInterval(carregarMensagens, 5000)
+    return () => clearInterval(timer)
+  }, [cotacaoId, fornecedorSelecionado, tipoChat])
+
+  useEffect(() => {
+    fimRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [mensagens])
+
+  async function carregarFornecedores() {
+    setCarregando(true)
+
+    try {
+      const response = await fetch(
+        `${API_URL}/cotacoes/${cotacaoId}/chat/fornecedores`,
+        { headers: authHeaders() }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar fornecedores.")
+      }
+
+      const lista = Array.isArray(data) ? data : []
+
+      setFornecedores(lista)
+
+      if (fornecedorLogado) {
+        setFornecedorSelecionado(
+          usuario?.fornecedorId || lista[0]?._id || ""
+        )
+      } else if (lista.length > 0) {
+        setFornecedorSelecionado((atual) => atual || lista[0]._id)
+      }
+    } catch (error) {
+      console.error(error)
+      alert(error.message)
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  async function carregarMensagens() {
+    try {
+      const parametros = new URLSearchParams({
+        tipoChat,
+      })
+
+      if (tipoChat === "privado" && !fornecedorLogado) {
+        parametros.set("fornecedorId", fornecedorSelecionado)
+      }
+
+      const response = await fetch(
+        `${API_URL}/cotacoes/${cotacaoId}/chat?${parametros.toString()}`,
+        { headers: authHeaders() }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar mensagens.")
+      }
+
+      setMensagens(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function enviarMensagem(event) {
+    event.preventDefault()
+
+    if (!texto.trim() && !arquivo) {
+      return
+    }
+
+    if (
+      tipoChat === "privado" &&
+      !fornecedorLogado &&
+      !fornecedorSelecionado
+    ) {
+      alert("Selecione um fornecedor.")
+      return
+    }
+
+    setEnviando(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("mensagem", texto.trim())
+      formData.append("tipoChat", tipoChat)
+
+      if (
+        tipoChat === "privado" &&
+        !fornecedorLogado
+      ) {
+        formData.append("fornecedorId", fornecedorSelecionado)
+      }
+
+      if (arquivo) {
+        formData.append("arquivo", arquivo)
+      }
+
+      const response = await fetch(
+        `${API_URL}/cotacoes/${cotacaoId}/chat`,
+        {
+          method: "POST",
+          headers: authHeaders(),
+          body: formData,
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao enviar mensagem.")
+      }
+
+      setTexto("")
+      setArquivo(null)
+      await carregarMensagens()
+    } catch (error) {
+      console.error(error)
+      alert(error.message)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const fornecedorAtual = fornecedores.find(
+    (item) => String(item._id) === String(fornecedorSelecionado)
+  )
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
+      <div className="flex h-[88vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {!fornecedorLogado && (
+          <aside className="hidden w-80 shrink-0 border-r border-slate-200 bg-slate-50 md:flex md:flex-col">
+            <div className="border-b border-slate-200 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">
+                Fornecedores
+              </p>
+
+              <div className="relative mt-3">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  value={busca}
+                  onChange={(event) => setBusca(event.target.value)}
+                  placeholder="Pesquisar fornecedor"
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTipoChat("grupo")
+                  setFornecedorSelecionado("")
+                }}
+                className={`mb-2 w-full rounded-xl p-3 text-left transition ${
+                  tipoChat === "grupo"
+                    ? "bg-emerald-600 text-white"
+                    : "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                }`}
+              >
+                <p className="text-sm font-semibold">
+                  Grupo geral
+                </p>
+                <p
+                  className={`mt-1 text-xs ${
+                    tipoChat === "grupo"
+                      ? "text-emerald-100"
+                      : "text-emerald-700"
+                  }`}
+                >
+                  Todas as empresas participantes
+                </p>
+              </button>
+
+              <p className="mb-2 px-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                Conversas privadas
+              </p>
+
+              {fornecedoresFiltrados.map((item) => {
+                const nome =
+                  item.empresa ||
+                  item.razaoSocial ||
+                  item.nomeFantasia ||
+                  item.responsavel ||
+                  "Fornecedor"
+
+                const ativo =
+                  tipoChat === "privado" &&
+                  String(item._id) === String(fornecedorSelecionado)
+
+                return (
+                  <button
+                    key={item._id}
+                    type="button"
+                    onClick={() => {
+                      setTipoChat("privado")
+                      setFornecedorSelecionado(item._id)
+                    }}
+                    className={`mb-1 w-full rounded-xl p-3 text-left transition ${
+                      ativo
+                        ? "bg-blue-600 text-white"
+                        : "hover:bg-white"
+                    }`}
+                  >
+                    <p className="truncate text-sm font-semibold">{nome}</p>
+                    <p
+                      className={`mt-1 truncate text-xs ${
+                        ativo ? "text-blue-100" : "text-slate-500"
+                      }`}
+                    >
+                      {item.email || "Sem e-mail"}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </aside>
+        )}
+
+        <section className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-blue-50 p-2 text-blue-600">
+                  <MessageCircle size={20} />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="truncate font-bold text-slate-950">
+                    {titulo}
+                  </h2>
+                  <p className="truncate text-xs text-slate-500">
+                    {tipoChat === "grupo"
+                      ? "Grupo geral com todas as empresas"
+                      : fornecedorLogado
+                        ? subtitulo || "Conversa privada com o Setor de Compras"
+                        : fornecedorAtual
+                          ? fornecedorAtual.empresa ||
+                            fornecedorAtual.razaoSocial ||
+                            fornecedorAtual.nomeFantasia ||
+                            fornecedorAtual.responsavel
+                          : "Selecione um fornecedor"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"
+            >
+              <X size={20} />
+            </button>
+          </header>
+
+          {fornecedorLogado && (
+            <div className="flex gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+              <button
+                type="button"
+                onClick={() => setTipoChat("privado")}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  tipoChat === "privado"
+                    ? "bg-blue-600 text-white"
+                    : "border border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Conversa privada
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipoChat("grupo")}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  tipoChat === "grupo"
+                    ? "bg-emerald-600 text-white"
+                    : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                }`}
+              >
+                Grupo geral
+              </button>
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto bg-slate-100 p-4 sm:p-5">
+            {tipoChat === "grupo" && (
+              <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                As mensagens e os arquivos enviados aqui serão visíveis para todas as empresas participantes desta cotação. Não envie proposta comercial, preço ou documento sigiloso no grupo.
+              </div>
+            )}
+
+            {carregando ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="animate-spin text-blue-600" />
+              </div>
+            ) : mensagens.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-center">
+                <div className="rounded-2xl bg-white p-4 text-slate-400 shadow-sm">
+                  <MessageCircle size={32} />
+                </div>
+                <p className="mt-4 font-semibold text-slate-700">
+                  Nenhuma mensagem ainda
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Inicie a conversa sobre esta cotação.
+                </p>
+              </div>
+            ) : (
+              <div className="mx-auto max-w-3xl space-y-3">
+                {mensagens.map((item) => {
+                  const minha =
+                    String(item.remetenteId || "") ===
+                      String(usuario.id || usuario._id || "") ||
+                    String(item.remetenteTipo || "").toLowerCase() ===
+                      (fornecedorLogado ? "fornecedor" : "interno")
+
+                  return (
+                    <div
+                      key={item._id}
+                      className={`flex ${minha ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
+                          minha
+                            ? "rounded-br-md bg-blue-600 text-white"
+                            : "rounded-bl-md bg-white text-slate-800"
+                        }`}
+                      >
+                        <p
+                          className={`mb-1 text-xs font-semibold ${
+                            minha ? "text-blue-100" : "text-blue-700"
+                          }`}
+                        >
+                          {item.remetenteNome || "Usuário"}
+                        </p>
+
+                        {item.mensagem && (
+                          <p className="whitespace-pre-wrap text-sm leading-6">
+                            {item.mensagem}
+                          </p>
+                        )}
+
+                        {item.arquivoUrl && (
+                          <a
+                            href={`${API_URL.replace("/api", "")}${item.arquivoUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`mt-2 flex items-center gap-3 rounded-xl border p-3 ${
+                              minha
+                                ? "border-blue-400 bg-blue-500"
+                                : "border-slate-200 bg-slate-50"
+                            }`}
+                          >
+                            <FileText size={20} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold">
+                                {item.arquivoNome ||
+                                  nomeArquivo(item.arquivoUrl)}
+                              </p>
+                              <p
+                                className={`text-xs ${
+                                  minha ? "text-blue-100" : "text-slate-500"
+                                }`}
+                              >
+                                Clique para abrir ou baixar
+                              </p>
+                            </div>
+                            <Download size={18} />
+                          </a>
+                        )}
+
+                        <p
+                          className={`mt-2 text-right text-[11px] ${
+                            minha ? "text-blue-100" : "text-slate-400"
+                          }`}
+                        >
+                          {dataHora(item.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div ref={fimRef} />
+              </div>
+            )}
+          </div>
+
+          {arquivo && (
+            <div className="flex items-center justify-between border-t border-slate-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+              <span className="truncate">
+                Arquivo: <strong>{arquivo.name}</strong>
+              </span>
+              <button type="button" onClick={() => setArquivo(null)}>
+                <X size={17} />
+              </button>
+            </div>
+          )}
+
+          <form
+            onSubmit={enviarMensagem}
+            className="flex items-end gap-2 border-t border-slate-200 bg-white p-3 sm:p-4"
+          >
+            <label className="cursor-pointer rounded-xl border border-slate-300 p-3 text-slate-600 transition hover:bg-slate-50">
+              <Paperclip size={20} />
+              <input
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.zip"
+                onChange={(event) =>
+                  setArquivo(event.target.files?.[0] || null)
+                }
+              />
+            </label>
+
+            <textarea
+              rows="1"
+              value={texto}
+              onChange={(event) => setTexto(event.target.value)}
+              placeholder="Digite uma mensagem..."
+              className="max-h-32 min-h-[46px] flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            />
+
+            <button
+              type="submit"
+              disabled={
+                enviando ||
+                (!texto.trim() && !arquivo) ||
+                (
+                  tipoChat === "privado" &&
+                  !fornecedorLogado &&
+                  !fornecedorSelecionado
+                )
+              }
+              className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-xl bg-blue-600 text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {enviando ? (
+                <Loader2 size={19} className="animate-spin" />
+              ) : (
+                <Send size={19} />
+              )}
+            </button>
+          </form>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+
 
 const API_URL = "http://localhost:5000/api"
 
@@ -524,6 +1059,9 @@ export default function Dashboard() {
     processo: "",
     observacao: "",
   })
+  const [buscaArquivo, setBuscaArquivo] = useState("")
+  const [modoArquivos, setModoArquivos] = useState("grade")
+  const [pastaArquivo, setPastaArquivo] = useState("Todos")
 
   const [demanda, setDemanda] = useState({
     secretaria: "",
@@ -2759,6 +3297,22 @@ export default function Dashboard() {
                             onClick={() => abrirDetalhesCotacao(item._id)}
                           />
 
+                          <ActionButton
+                            title="Conversar com fornecedores"
+                            icon={MessageCircle}
+                            tone="emerald"
+                            onClick={() =>
+                              setChatResultado({
+                                cotacaoId: item._id,
+                                numero:
+                                  item.numero ||
+                                  item.numeroCotacao ||
+                                  item._id,
+                                fornecedor: "",
+                              })
+                            }
+                          />
+
                           {item.status === "Aberta" && (
                             <>
                               <ActionButton
@@ -4203,46 +4757,162 @@ export default function Dashboard() {
     </>
   )
 
+  const pastasArquivos = [
+    { nome: "Todos", icon: FolderOpen, quantidade: arquivos.length },
+    {
+      nome: "Documentos",
+      icon: FileText,
+      quantidade: arquivos.filter((item) => item.tipo === "Documento").length,
+    },
+    {
+      nome: "Propostas",
+      icon: ClipboardList,
+      quantidade: arquivos.filter((item) => item.tipo === "Proposta").length,
+    },
+    {
+      nome: "Relatórios",
+      icon: BarChart3,
+      quantidade: arquivos.filter((item) => item.tipo === "Relatório").length,
+    },
+    {
+      nome: "Certidões",
+      icon: BadgeCheck,
+      quantidade: arquivos.filter((item) => item.tipo === "Certidão").length,
+    },
+    {
+      nome: "Contratos",
+      icon: FileCheck2,
+      quantidade: arquivos.filter((item) => item.tipo === "Contrato").length,
+    },
+  ]
+
+  const arquivosFiltrados = arquivos.filter((item) => {
+    const termo = buscaArquivo.trim().toLowerCase()
+    const correspondePasta =
+      pastaArquivo === "Todos" ||
+      item.tipo === pastaArquivo.replace("ões", "ão").replace("os", "o") ||
+      (pastaArquivo === "Documentos" && item.tipo === "Documento") ||
+      (pastaArquivo === "Propostas" && item.tipo === "Proposta") ||
+      (pastaArquivo === "Relatórios" && item.tipo === "Relatório") ||
+      (pastaArquivo === "Certidões" && item.tipo === "Certidão") ||
+      (pastaArquivo === "Contratos" && item.tipo === "Contrato")
+
+    const correspondeBusca = [
+      item.nome,
+      item.tipo,
+      item.processo,
+      item.observacao,
+      item.responsavel,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(termo)
+
+    return correspondePasta && correspondeBusca
+  })
+
   const ArquivosPage = (
     <>
       <PageHeader
         eyebrow="Documentação do processo"
         title="Central de arquivos"
-        description="Organize documentos, propostas, relatórios e anexos do credenciamento."
+        description="Organize pastas, documentos, propostas, relatórios e anexos dos processos."
         actionLabel="Adicionar arquivo"
         onAction={() => setMostrarFormArquivo(true)}
       />
 
-      <div className="grid gap-4 sm:grid-cols-4">
-        <MetricCard
-          title="Total de arquivos"
-          value={arquivos.length}
-          description="Documentos cadastrados"
-          icon={FolderOpen}
-          tone="blue"
-        />
-        <MetricCard
-          title="Documentos"
-          value={arquivos.filter((item) => item.tipo === "Documento").length}
-          description="Documentos administrativos"
-          icon={FileText}
-          tone="violet"
-        />
-        <MetricCard
-          title="Propostas"
-          value={arquivos.filter((item) => item.tipo === "Proposta").length}
-          description="Arquivos enviados por fornecedores"
-          icon={ClipboardList}
-          tone="amber"
-        />
-        <MetricCard
-          title="Relatórios"
-          value={arquivos.filter((item) => item.tipo === "Relatório").length}
-          description="Relatórios e resultados"
-          icon={BarChart3}
-          tone="emerald"
-        />
-      </div>
+      <Card>
+        <div className="border-b border-slate-100 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative flex-1">
+              <Search
+                size={18}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                value={buscaArquivo}
+                onChange={(event) => setBuscaArquivo(event.target.value)}
+                placeholder="O que você está buscando?"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white pl-11 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setModoArquivos("grade")}
+                className={`rounded-xl border p-3 transition ${
+                  modoArquivos === "grade"
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+                title="Visualização em grade"
+              >
+                <Boxes size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoArquivos("lista")}
+                className={`rounded-xl border p-3 transition ${
+                  modoArquivos === "lista"
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+                title="Visualização em lista"
+              >
+                <ListChecks size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Pastas</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Selecione uma pasta para filtrar os arquivos.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {pastasArquivos.map(({ nome, icon: Icon, quantidade }) => {
+              const ativa = pastaArquivo === nome
+              return (
+                <button
+                  key={nome}
+                  type="button"
+                  onClick={() => setPastaArquivo(nome)}
+                  className={`group flex items-center gap-3 rounded-xl border p-4 text-left transition ${
+                    ativa
+                      ? "border-blue-300 bg-blue-50 shadow-sm"
+                      : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <div
+                    className={`rounded-lg p-2.5 ${
+                      ativa
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-700"
+                    }`}
+                  >
+                    <Icon size={19} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800">
+                      {nome}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {quantidade} arquivo(s)
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </Card>
 
       {mostrarFormArquivo && (
         <Card className="mt-6">
@@ -4293,8 +4963,8 @@ export default function Dashboard() {
               }
             />
 
-            <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center md:col-span-2">
-              <Upload className="mx-auto text-slate-400" size={28} />
+            <label className="group cursor-pointer rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition hover:border-blue-300 hover:bg-blue-50/50 md:col-span-2">
+              <Upload className="mx-auto text-slate-400 group-hover:text-blue-600" size={30} />
               <p className="mt-3 text-sm font-semibold text-slate-700">
                 Selecione ou arraste o arquivo
               </p>
@@ -4302,7 +4972,7 @@ export default function Dashboard() {
                 PDF, DOCX, XLSX, PNG ou JPG
               </p>
               <input type="file" className="mt-4 text-sm text-slate-600" />
-            </div>
+            </label>
 
             <div className="flex gap-3 md:col-span-2 md:justify-end">
               <button
@@ -4326,24 +4996,34 @@ export default function Dashboard() {
 
       <Card className="mt-6">
         <CardHeader
-          title="Arquivos do processo"
-          description={`${arquivos.length} arquivo(s) cadastrado(s).`}
+          title={pastaArquivo === "Todos" ? "Documentos" : pastaArquivo}
+          description={`${arquivosFiltrados.length} arquivo(s) encontrado(s).`}
+          action={
+            <button
+              type="button"
+              onClick={() => setMostrarFormArquivo(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              <Plus size={16} />
+              Novo arquivo
+            </button>
+          }
         />
 
-        {arquivos.length === 0 ? (
+        {arquivosFiltrados.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
-            title="Nenhum arquivo cadastrado"
-            description="Adicione documentos, propostas ou relatórios ao processo."
+            title="Ainda não há documentos por aqui"
+            description="Adicione documentos utilizando o botão acima."
             actionLabel="Adicionar arquivo"
             onAction={() => setMostrarFormArquivo(true)}
           />
-        ) : (
+        ) : modoArquivos === "grade" ? (
           <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
-            {arquivos.map((item) => (
+            {arquivosFiltrados.map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:shadow-sm"
+                className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-200 hover:shadow-sm"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
@@ -4360,12 +5040,18 @@ export default function Dashboard() {
                 <p className="mt-2 text-xs text-slate-500">
                   {item.tipo} · {item.processo || "Sem processo"}
                 </p>
+                {item.observacao && (
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">
+                    {item.observacao}
+                  </p>
+                )}
 
                 <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
                   <span className="text-xs text-slate-400">
                     {formatarData(item.criadoEm)}
                   </span>
                   <div className="flex gap-2">
+                    <ActionButton title="Visualizar" icon={Eye} />
                     <ActionButton title="Baixar" icon={Download} tone="blue" />
                     <ActionButton
                       title="Excluir"
@@ -4381,6 +5067,63 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3.5">Nome</th>
+                  <th className="px-5 py-3.5">Tipo</th>
+                  <th className="px-5 py-3.5">Processo</th>
+                  <th className="px-5 py-3.5">Responsável</th>
+                  <th className="px-5 py-3.5">Data</th>
+                  <th className="px-5 py-3.5 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {arquivosFiltrados.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/70">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
+                          <FileText size={18} />
+                        </div>
+                        <span className="text-sm font-semibold text-slate-900">
+                          {item.nome}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{item.tipo}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {item.processo || "-"}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {item.responsavel || "-"}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-500">
+                      {formatarData(item.criadoEm)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end gap-2">
+                        <ActionButton title="Visualizar" icon={Eye} />
+                        <ActionButton title="Baixar" icon={Download} tone="blue" />
+                        <ActionButton
+                          title="Excluir"
+                          icon={Trash2}
+                          tone="red"
+                          onClick={() =>
+                            setArquivos((old) =>
+                              old.filter((arquivo) => arquivo.id !== item.id)
+                            )
+                          }
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>
@@ -4536,7 +5279,7 @@ export default function Dashboard() {
     apiUrl={API_URL}
     authHeaders={authHeaders}
     cotacaoId={chatResultado.cotacaoId}
-    titulo={`Chat do resultado ${chatResultado.numero}`}
+    titulo={`Chat da cotação ${chatResultado.numero}`}
     subtitulo={chatResultado.fornecedor}
     onClose={() => setChatResultado(null)}
   />
