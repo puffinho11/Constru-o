@@ -440,10 +440,30 @@ function SinapiSelector({ material, onSelect, onManualChange }) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const user = JSON.parse(localStorage.getItem("user") || "{}")
+
+  let user = {}
+
+  try {
+    user = JSON.parse(localStorage.getItem("user") || "{}")
+  } catch {
+    user = {}
+  }
+
+  const fornecedorLogado =
+    String(user?.role || "").toLowerCase() === "fornecedor" ||
+    String(user?.tipo || "").toLowerCase() === "fornecedor" ||
+    String(user?.perfil || "").toLowerCase() === "fornecedor"
+
+  const telasPermitidasFornecedor = [
+    "propostas",
+    "julgamento",
+    "resultado",
+  ]
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [telaAtual, setTelaAtual] = useState("painel")
+  const [telaAtual, setTelaAtual] = useState(
+    fornecedorLogado ? "propostas" : "painel"
+  )
   const [carregando, setCarregando] = useState(false)
 
   const [secretarias, setSecretarias] = useState([])
@@ -529,7 +549,7 @@ export default function Dashboard() {
     },
   ])
 
-  const menu = [
+  const menuCompleto = [
     { id: "painel", nome: "Dashboard", icon: LayoutDashboard },
     { id: "secretarias", nome: "Secretarias", icon: Building2 },
     { id: "demanda", nome: "Nova Demanda", icon: FilePlus2 },
@@ -544,6 +564,12 @@ export default function Dashboard() {
     { id: "arquivos", nome: "Arquivos", icon: FolderOpen },
   ]
 
+  const menu = fornecedorLogado
+    ? menuCompleto.filter((item) =>
+        telasPermitidasFornecedor.includes(item.id)
+      )
+    : menuCompleto
+
   useEffect(() => {
     carregarDados()
   }, [])
@@ -551,15 +577,24 @@ export default function Dashboard() {
   async function carregarDados() {
     setCarregando(true)
 
-    await Promise.all([
-      carregarSecretarias(),
-      carregarDemandas(),
-      carregarFornecedores(),
-      carregarCotacoes(),
-      carregarPropostas(),
-    ])
-
-    setCarregando(false)
+    try {
+      if (fornecedorLogado) {
+        await Promise.all([
+          carregarCotacoes(),
+          carregarPropostas(),
+        ])
+      } else {
+        await Promise.all([
+          carregarSecretarias(),
+          carregarDemandas(),
+          carregarFornecedores(),
+          carregarCotacoes(),
+          carregarPropostas(),
+        ])
+      }
+    } finally {
+      setCarregando(false)
+    }
   }
 
   async function carregarSecretarias() {
@@ -1448,6 +1483,15 @@ export default function Dashboard() {
   const menorProposta = propostasOrdenadas[0]
 
   function abrirTela(id) {
+    if (
+      fornecedorLogado &&
+      !telasPermitidasFornecedor.includes(id)
+    ) {
+      setTelaAtual("propostas")
+      setSidebarOpen(false)
+      return
+    }
+
     setTelaAtual(id)
     setSidebarOpen(false)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -4412,7 +4456,10 @@ export default function Dashboard() {
           <div className="mb-3 rounded-xl bg-white/5 p-3">
             <p className="text-xs text-slate-400">Usuário conectado</p>
             <p className="mt-1 truncate text-sm font-semibold">
-              {user?.nome || "Administrador"}
+              {user?.nome || (fornecedorLogado ? "Fornecedor" : "Administrador")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {fornecedorLogado ? "Acesso de fornecedor" : user?.perfil || user?.role || ""}
             </p>
           </div>
 
@@ -4454,16 +4501,16 @@ export default function Dashboard() {
         </header>
 
         <main className="p-4 sm:p-6 lg:p-8">
-          {telaAtual === "painel" && PainelPage}
-          {telaAtual === "secretarias" && SecretariasPage}
-          {telaAtual === "demanda" && NovaDemandaPage}
-          {telaAtual === "orcamento" && OrcamentoPage}
-          {telaAtual === "solicitacao" && SolicitacoesPage}
-          {telaAtual === "fornecedores" && FornecedoresPage}
+          {!fornecedorLogado && telaAtual === "painel" && PainelPage}
+          {!fornecedorLogado && telaAtual === "secretarias" && SecretariasPage}
+          {!fornecedorLogado && telaAtual === "demanda" && NovaDemandaPage}
+          {!fornecedorLogado && telaAtual === "orcamento" && OrcamentoPage}
+          {!fornecedorLogado && telaAtual === "solicitacao" && SolicitacoesPage}
+          {!fornecedorLogado && telaAtual === "fornecedores" && FornecedoresPage}
           {telaAtual === "propostas" && PropostasPage}
           {telaAtual === "julgamento" && JulgamentoPage}
           {telaAtual === "resultado" && ResultadoPage}
-          {telaAtual === "empenhos" && (
+          {!fornecedorLogado && telaAtual === "empenhos" && (
             <EmpenhosAdminPage
               apiUrl={API_URL}
               authHeaders={authHeaders}
@@ -4473,14 +4520,14 @@ export default function Dashboard() {
               StatusBadge={StatusBadge}
             />
           )}
-          {telaAtual === "administracao" && (
+          {!fornecedorLogado && telaAtual === "administracao" && (
             <AdminUsuariosPage
               apiUrl={API_URL}
               authHeaders={authHeaders}
               fornecedores={fornecedores}
             />
           )}
-          {telaAtual === "arquivos" && ArquivosPage}
+          {!fornecedorLogado && telaAtual === "arquivos" && ArquivosPage}
         </main>
       </div>
 

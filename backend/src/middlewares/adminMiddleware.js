@@ -1,5 +1,25 @@
 import User from "../models/User.js"
 
+function normalizar(valor) {
+  return String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
+function verificarAdministrador(...valores) {
+  const permissoesAdministrativas = [
+    "admin",
+    "administrador",
+    "administrator",
+  ]
+
+  return valores.some((valor) =>
+    permissoesAdministrativas.includes(normalizar(valor))
+  )
+}
+
 export async function adminMiddleware(req, res, next) {
   try {
     const usuarioId =
@@ -29,20 +49,12 @@ export async function adminMiddleware(req, res, next) {
       })
     }
 
-    const perfil = String(
-      usuario.perfil ||
-      usuario.role ||
-      req.user?.perfil ||
-      req.user?.role ||
-      ""
+    const administrador = verificarAdministrador(
+      usuario.perfil,
+      usuario.role,
+      req.user?.perfil,
+      req.user?.role
     )
-      .trim()
-      .toLowerCase()
-
-    const administrador =
-      perfil === "administrador" ||
-      perfil === "admin" ||
-      perfil === "administrator"
 
     if (!administrador) {
       console.error("Acesso administrativo recusado:", {
@@ -55,28 +67,25 @@ export async function adminMiddleware(req, res, next) {
 
       return res.status(403).json({
         erro: "Acesso permitido somente para administradores.",
-        usuario: {
-          id: usuario._id,
-          nome: usuario.nome,
-          email: usuario.email,
-          perfil: usuario.perfil,
-          role: usuario.role,
-        },
       })
     }
 
     req.user = {
       ...req.user,
       id: usuario._id,
+      _id: usuario._id,
       nome: usuario.nome,
       email: usuario.email,
-      perfil: usuario.perfil || "Administrador",
-      role: usuario.role || "admin",
+      perfil: usuario.perfil,
+      role: usuario.role,
     }
 
     return next()
   } catch (error) {
-    console.error("Erro ao verificar administrador:", error)
+    console.error(
+      "Erro ao verificar administrador:",
+      error
+    )
 
     return res.status(500).json({
       erro: "Erro ao verificar permissão administrativa.",
@@ -84,3 +93,5 @@ export async function adminMiddleware(req, res, next) {
     })
   }
 }
+
+export default adminMiddleware

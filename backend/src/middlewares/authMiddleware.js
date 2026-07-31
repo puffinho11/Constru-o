@@ -10,7 +10,7 @@ export function authMiddleware(req, res, next) {
       })
     }
 
-    const partes = authorization.split(" ")
+    const partes = authorization.trim().split(/\s+/)
 
     if (
       partes.length !== 2 ||
@@ -67,3 +67,5 @@ export function authMiddleware(req, res, next) {
     })
   }
 }
+
+export default authMiddleware
