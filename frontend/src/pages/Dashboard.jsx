@@ -57,7 +57,6 @@ import {
 } from "lucide-react"
 
 import AdminUsuariosPage from "../components/AdminUsuariosPage"
-import EmpenhosAdminPage from "../components/EmpenhosAdminPage"
 
 function dataHora(valor) {
   if (!valor) return ""
@@ -1054,6 +1053,8 @@ export default function Dashboard() {
   })
 
   const [mostrarFormArquivo, setMostrarFormArquivo] = useState(false)
+  const [arquivoSelecionado, setArquivoSelecionado] = useState(null)
+  const formularioArquivoRef = useRef(null)
   const [chatResultado, setChatResultado] = useState(null)
   const [novoArquivo, setNovoArquivo] = useState({
     nome: "",
@@ -1064,6 +1065,18 @@ export default function Dashboard() {
   const [buscaArquivo, setBuscaArquivo] = useState("")
   const [modoArquivos, setModoArquivos] = useState("grade")
   const [pastaArquivo, setPastaArquivo] = useState("Todos")
+
+  const [pastaEmpenhoAtiva, setPastaEmpenhoAtiva] = useState("Todas")
+  const [mostrarFormEmpenho, setMostrarFormEmpenho] = useState(false)
+  const [empenhosLocais, setEmpenhosLocais] = useState([])
+  const [novoEmpenhoLocal, setNovoEmpenhoLocal] = useState({
+    secretaria: "",
+    numero: "",
+    fornecedor: "",
+    valor: "",
+    descricao: "",
+    arquivo: null,
+  })
 
   const [demanda, setDemanda] = useState({
     secretaria: "",
@@ -1081,6 +1094,9 @@ export default function Dashboard() {
       quantidade: "",
       unidade: "",
       observacao: "",
+      valorManual: "",
+      imagemNome: "",
+      imagemPreview: "",
       codigoSinapi: "",
       tipoSinapi: "",
       valorSinapi: 0,
@@ -1606,6 +1622,35 @@ export default function Dashboard() {
   }
 
 
+  function alterarImagemItem(id, arquivo) {
+    if (!arquivo) {
+      alterarItem(id, "imagemNome", "")
+      alterarItem(id, "imagemPreview", "")
+      return
+    }
+
+    if (!arquivo.type?.startsWith("image/")) {
+      alert("Selecione um arquivo de imagem.")
+      return
+    }
+
+    const leitor = new FileReader()
+    leitor.onload = () => {
+      setMateriais((old) =>
+        old.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                imagemNome: arquivo.name,
+                imagemPreview: String(leitor.result || ""),
+              }
+            : item
+        )
+      )
+    }
+    leitor.readAsDataURL(arquivo)
+  }
+
   function selecionarItemSinapi(id, itemSinapi) {
     setMateriais((old) =>
       old.map((item) =>
@@ -1925,19 +1970,39 @@ export default function Dashboard() {
     )
   }
 
+  function abrirFormularioArquivo() {
+    setMostrarFormArquivo(true)
+    window.setTimeout(() => {
+      formularioArquivoRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    }, 80)
+  }
+
   function salvarArquivo(event) {
     event.preventDefault()
 
-    if (!novoArquivo.nome) {
+    if (!novoArquivo.nome.trim()) {
       alert("Informe o nome do arquivo.")
       return
     }
+
+    if (!arquivoSelecionado) {
+      alert("Selecione um arquivo para continuar.")
+      return
+    }
+
+    const urlLocal = URL.createObjectURL(arquivoSelecionado)
 
     setArquivos((old) => [
       {
         id: crypto.randomUUID(),
         ...novoArquivo,
-        tamanho: "Arquivo local",
+        nome: novoArquivo.nome.trim(),
+        arquivoNome: arquivoSelecionado.name,
+        arquivoUrl: urlLocal,
+        tamanho: `${(arquivoSelecionado.size / 1024 / 1024).toFixed(2)} MB`,
         criadoEm: new Date().toISOString(),
         responsavel: user?.nome || "Administrador",
       },
@@ -1950,6 +2015,7 @@ export default function Dashboard() {
       processo: "",
       observacao: "",
     })
+    setArquivoSelecionado(null)
     setMostrarFormArquivo(false)
   }
 
@@ -2005,7 +2071,8 @@ export default function Dashboard() {
   const totalReferenciaSinapi = materiais.reduce(
     (total, item) =>
       total +
-      Number(item.quantidade || 0) * Number(item.valorSinapi || 0),
+      Number(item.quantidade || 0) *
+        Number(item.valorManual || item.valorSinapi || 0),
     0
   )
 
@@ -2622,6 +2689,58 @@ export default function Dashboard() {
                       }
                       placeholder="Detalhes técnicos do item"
                     />
+                    <Input
+                      label="Valor unitário manual (R$)"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={material.valorManual || ""}
+                      onChange={(event) =>
+                        alterarItem(material.id, "valorManual", event.target.value)
+                      }
+                      placeholder="0,00"
+                    />
+
+                    <label className="grid gap-2 text-sm font-medium text-slate-700 md:col-span-2">
+                      Imagem do item
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                          {material.imagemPreview ? (
+                            <img
+                              src={material.imagemPreview}
+                              alt={`Imagem do item ${index + 1}`}
+                              className="h-24 w-24 rounded-xl border border-slate-200 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                              <Upload size={28} />
+                            </div>
+                          )}
+
+                          <div className="flex-1">
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              onChange={(event) =>
+                                alterarImagemItem(
+                                  material.id,
+                                  event.target.files?.[0] || null
+                                )
+                              }
+                              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <p className="mt-2 text-xs text-slate-500">
+                              PNG, JPG ou WEBP. A imagem será vinculada ao item.
+                            </p>
+                            {material.imagemNome && (
+                              <p className="mt-1 truncate text-xs font-medium text-slate-700">
+                                {material.imagemNome}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </label>
                   </div>
 
                   {material.codigoSinapi && (
@@ -4813,6 +4932,319 @@ export default function Dashboard() {
     return correspondePasta && correspondeBusca
   })
 
+  const secretariasEmpenho = Array.from(
+    new Set([
+      ...secretarias.map((item) => item.nome).filter(Boolean),
+      ...empenhosLocais.map((item) => item.secretaria).filter(Boolean),
+    ])
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"))
+
+  const empenhosFiltrados = empenhosLocais.filter(
+    (item) =>
+      pastaEmpenhoAtiva === "Todas" ||
+      item.secretaria === pastaEmpenhoAtiva
+  )
+
+  function salvarEmpenhoLocal(event) {
+    event.preventDefault()
+
+    if (!novoEmpenhoLocal.secretaria || !novoEmpenhoLocal.numero) {
+      alert("Informe a secretaria e o número do empenho.")
+      return
+    }
+
+    const arquivo = novoEmpenhoLocal.arquivo
+
+    setEmpenhosLocais((old) => [
+      {
+        id: crypto.randomUUID(),
+        ...novoEmpenhoLocal,
+        valor: Number(novoEmpenhoLocal.valor || 0),
+        arquivoNome: arquivo?.name || "",
+        arquivoUrl: arquivo ? URL.createObjectURL(arquivo) : "",
+        criadoEm: new Date().toISOString(),
+      },
+      ...old,
+    ])
+
+    setNovoEmpenhoLocal({
+      secretaria: "",
+      numero: "",
+      fornecedor: "",
+      valor: "",
+      descricao: "",
+      arquivo: null,
+    })
+    setMostrarFormEmpenho(false)
+  }
+
+  const EmpenhosPastasPage = (
+    <>
+      <PageHeader
+        eyebrow="Execução da contratação"
+        title="Arquivo de empenhos"
+        description="Organize os empenhos em pastas por secretaria e mantenha os documentos centralizados."
+        actionLabel="Novo empenho"
+        onAction={() => setMostrarFormEmpenho(true)}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[280px_1fr]">
+        <Card className="h-fit">
+          <CardHeader
+            title="Pastas por secretaria"
+            description="Selecione uma pasta para visualizar os empenhos."
+          />
+          <div className="space-y-2 p-4">
+            <button
+              type="button"
+              onClick={() => setPastaEmpenhoAtiva("Todas")}
+              className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                pastaEmpenhoAtiva === "Todas"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-50 text-slate-700 hover:bg-blue-50"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <FolderOpen size={18} /> Todas as secretarias
+              </span>
+              <span>{empenhosLocais.length}</span>
+            </button>
+
+            {secretariasEmpenho.map((secretaria) => {
+              const quantidade = empenhosLocais.filter(
+                (item) => item.secretaria === secretaria
+              ).length
+              const ativa = pastaEmpenhoAtiva === secretaria
+
+              return (
+                <button
+                  key={secretaria}
+                  type="button"
+                  onClick={() => setPastaEmpenhoAtiva(secretaria)}
+                  className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                    ativa
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-50 text-slate-700 hover:bg-blue-50"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <FolderOpen size={18} className="shrink-0" />
+                    <span className="truncate">{secretaria}</span>
+                  </span>
+                  <span>{quantidade}</span>
+                </button>
+              )
+            })}
+
+            {secretariasEmpenho.length === 0 && (
+              <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                Cadastre secretarias para criar as pastas automaticamente.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        <div className="space-y-6">
+          {mostrarFormEmpenho && (
+            <Card>
+              <CardHeader
+                title="Cadastrar empenho"
+                description="Escolha a secretaria e anexe o documento do empenho."
+              />
+              <form
+                onSubmit={salvarEmpenhoLocal}
+                className="grid gap-4 p-5 md:grid-cols-2"
+              >
+                <Select
+                  label="Secretaria *"
+                  value={novoEmpenhoLocal.secretaria}
+                  onChange={(event) =>
+                    setNovoEmpenhoLocal({
+                      ...novoEmpenhoLocal,
+                      secretaria: event.target.value,
+                    })
+                  }
+                >
+                  <option value="">Selecione</option>
+                  {secretariasEmpenho.map((secretaria) => (
+                    <option key={secretaria} value={secretaria}>
+                      {secretaria}
+                    </option>
+                  ))}
+                </Select>
+
+                <Input
+                  label="Número do empenho *"
+                  value={novoEmpenhoLocal.numero}
+                  onChange={(event) =>
+                    setNovoEmpenhoLocal({
+                      ...novoEmpenhoLocal,
+                      numero: event.target.value,
+                    })
+                  }
+                  placeholder="Ex.: 1234/2026"
+                />
+
+                <Input
+                  label="Fornecedor"
+                  value={novoEmpenhoLocal.fornecedor}
+                  onChange={(event) =>
+                    setNovoEmpenhoLocal({
+                      ...novoEmpenhoLocal,
+                      fornecedor: event.target.value,
+                    })
+                  }
+                  placeholder="Nome do fornecedor"
+                />
+
+                <Input
+                  label="Valor do empenho (R$)"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={novoEmpenhoLocal.valor}
+                  onChange={(event) =>
+                    setNovoEmpenhoLocal({
+                      ...novoEmpenhoLocal,
+                      valor: event.target.value,
+                    })
+                  }
+                  placeholder="0,00"
+                />
+
+                <Textarea
+                  label="Descrição"
+                  className="md:col-span-2"
+                  rows="3"
+                  value={novoEmpenhoLocal.descricao}
+                  onChange={(event) =>
+                    setNovoEmpenhoLocal({
+                      ...novoEmpenhoLocal,
+                      descricao: event.target.value,
+                    })
+                  }
+                  placeholder="Informe o objeto ou observações do empenho."
+                />
+
+                <label className="grid gap-2 text-sm font-medium text-slate-700 md:col-span-2">
+                  Documento do empenho
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                    onChange={(event) =>
+                      setNovoEmpenhoLocal({
+                        ...novoEmpenhoLocal,
+                        arquivo: event.target.files?.[0] || null,
+                      })
+                    }
+                    className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600"
+                  />
+                </label>
+
+                <div className="flex gap-3 md:col-span-2 md:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setMostrarFormEmpenho(false)}
+                    className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    <Save size={17} /> Salvar empenho
+                  </button>
+                </div>
+              </form>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader
+              title={
+                pastaEmpenhoAtiva === "Todas"
+                  ? "Todos os empenhos"
+                  : pastaEmpenhoAtiva
+              }
+              description={`${empenhosFiltrados.length} empenho(s) arquivado(s).`}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setMostrarFormEmpenho(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                >
+                  <Plus size={16} /> Novo empenho
+                </button>
+              }
+            />
+
+            {empenhosFiltrados.length === 0 ? (
+              <EmptyState
+                icon={FolderOpen}
+                title="Nenhum empenho nesta pasta"
+                description="Cadastre um empenho e selecione a secretaria correspondente."
+                actionLabel="Cadastrar empenho"
+                onAction={() => setMostrarFormEmpenho(true)}
+              />
+            ) : (
+              <div className="grid gap-4 p-5 md:grid-cols-2">
+                {empenhosFiltrados.map((item) => (
+                  <article
+                    key={item.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                        <ReceiptText size={22} />
+                      </div>
+                      <StatusBadge status="Arquivado" />
+                    </div>
+                    <h3 className="mt-4 font-bold text-slate-900">
+                      Empenho {item.numero}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {item.secretaria}
+                    </p>
+                    <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-400">Fornecedor</p>
+                        <p className="mt-1 font-semibold text-slate-700">
+                          {item.fornecedor || "Não informado"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Valor</p>
+                        <p className="mt-1 font-semibold text-emerald-700">
+                          {formatarMoeda(item.valor)}
+                        </p>
+                      </div>
+                    </div>
+                    {item.descricao && (
+                      <p className="mt-3 text-sm leading-6 text-slate-600">
+                        {item.descricao}
+                      </p>
+                    )}
+                    {item.arquivoUrl && (
+                      <a
+                        href={item.arquivoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                      >
+                        <Download size={17} /> Abrir documento
+                      </a>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </>
+  )
+
   const ArquivosPage = (
     <>
       <PageHeader
@@ -4820,7 +5252,7 @@ export default function Dashboard() {
         title="Central de arquivos"
         description="Organize pastas, documentos, propostas, relatórios e anexos dos processos."
         actionLabel="Adicionar arquivo"
-        onAction={() => setMostrarFormArquivo(true)}
+        onAction={abrirFormularioArquivo}
       />
 
       <Card>
@@ -4917,6 +5349,7 @@ export default function Dashboard() {
       </Card>
 
       {mostrarFormArquivo && (
+        <div ref={formularioArquivoRef} className="scroll-mt-6">
         <Card className="mt-6">
           <CardHeader
             title="Adicionar arquivo"
@@ -4973,13 +5406,28 @@ export default function Dashboard() {
               <p className="mt-1 text-xs text-slate-500">
                 PDF, DOCX, XLSX, PNG ou JPG
               </p>
-              <input type="file" className="mt-4 text-sm text-slate-600" />
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                onChange={(event) =>
+                  setArquivoSelecionado(event.target.files?.[0] || null)
+                }
+                className="mt-4 text-sm text-slate-600"
+              />
+              {arquivoSelecionado && (
+                <p className="mt-3 text-xs font-semibold text-blue-700">
+                  Selecionado: {arquivoSelecionado.name}
+                </p>
+              )}
             </label>
 
             <div className="flex gap-3 md:col-span-2 md:justify-end">
               <button
                 type="button"
-                onClick={() => setMostrarFormArquivo(false)}
+                onClick={() => {
+                  setMostrarFormArquivo(false)
+                  setArquivoSelecionado(null)
+                }}
                 className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Cancelar
@@ -4994,6 +5442,7 @@ export default function Dashboard() {
             </div>
           </form>
         </Card>
+        </div>
       )}
 
       <Card className="mt-6">
@@ -5003,7 +5452,7 @@ export default function Dashboard() {
           action={
             <button
               type="button"
-              onClick={() => setMostrarFormArquivo(true)}
+              onClick={abrirFormularioArquivo}
               className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
             >
               <Plus size={16} />
@@ -5018,7 +5467,7 @@ export default function Dashboard() {
             title="Ainda não há documentos por aqui"
             description="Adicione documentos utilizando o botão acima."
             actionLabel="Adicionar arquivo"
-            onAction={() => setMostrarFormArquivo(true)}
+            onAction={abrirFormularioArquivo}
           />
         ) : modoArquivos === "grade" ? (
           <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
@@ -5042,6 +5491,16 @@ export default function Dashboard() {
                 <p className="mt-2 text-xs text-slate-500">
                   {item.tipo} · {item.processo || "Sem processo"}
                 </p>
+                {item.arquivoUrl && (
+                  <a
+                    href={item.arquivoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    <ExternalLink size={16} /> Abrir arquivo
+                  </a>
+                )}
                 {item.observacao && (
                   <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">
                     {item.observacao}
@@ -5255,16 +5714,7 @@ export default function Dashboard() {
           {telaAtual === "propostas" && PropostasPage}
           {telaAtual === "julgamento" && JulgamentoPage}
           {telaAtual === "resultado" && ResultadoPage}
-          {!fornecedorLogado && telaAtual === "empenhos" && (
-            <EmpenhosAdminPage
-              apiUrl={API_URL}
-              authHeaders={authHeaders}
-              cotacoes={cotacoes}
-              formatarMoeda={formatarMoeda}
-              formatarData={formatarData}
-              StatusBadge={StatusBadge}
-            />
-          )}
+          {!fornecedorLogado && telaAtual === "empenhos" && EmpenhosPastasPage}
           {!fornecedorLogado && telaAtual === "administracao" && (
             <AdminUsuariosPage
               apiUrl={API_URL}
