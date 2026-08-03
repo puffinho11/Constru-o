@@ -1323,30 +1323,50 @@ export default function Dashboard() {
       return
     }
 
+    const token = localStorage.getItem("token")
+
+    if (!token) {
+      alert("Sua sessão expirou. Entre novamente no sistema.")
+      sair()
+      return
+    }
+
     setCarregando(true)
 
     try {
-      const method = acao === "cancelar" ? "PATCH" : "POST"
+      const endpoint = `/cotacoes/${cotacaoId}/${acao}`
+      const response =
+        acao === "cancelar"
+          ? await api.patch(endpoint, {})
+          : await api.post(endpoint, {})
 
-      const response = await fetch(
-        `${API_URL}/cotacoes/${cotacaoId}/${acao}`,
-        {
-          method,
-          headers: authHeaders(true),
-        }
-      )
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.erro || "Erro ao executar a ação.")
-      }
+      const data = response.data || {}
 
       alert(data.mensagem || "Ação realizada com sucesso.")
-      await carregarCotacoes()
+
+      await Promise.all([
+        carregarCotacoes(),
+        carregarPropostas(),
+      ])
+
+      if (cotacaoSelecionada?.cotacao?._id === cotacaoId) {
+        await abrirDetalhesCotacao(cotacaoId)
+      }
     } catch (error) {
-      console.error(error)
-      alert(error.message || "Erro ao executar a ação.")
+      console.error("Erro ao executar ação da cotação:", error)
+
+      if (error?.response?.status === 401) {
+        alert("Sua sessão expirou. Entre novamente no sistema.")
+        sair()
+        return
+      }
+
+      alert(
+        error?.response?.data?.erro ||
+          error?.response?.data?.message ||
+          error.message ||
+          "Erro ao executar a ação."
+      )
     } finally {
       setCarregando(false)
     }
