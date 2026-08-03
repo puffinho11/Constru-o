@@ -33,7 +33,16 @@ dotenv.config();
 
 const app = express();
 
-app.use(express.json({ limit: "10mb" }));
+// ======================
+// LEITURA DAS REQUISIÇÕES
+// ======================
+
+app.use(
+  express.json({
+    limit: "10mb",
+  })
+);
+
 app.use(
   express.urlencoded({
     extended: true,
@@ -54,94 +63,206 @@ const allowedOrigins = [
   process.env.FRONT_URL,
 ].filter(Boolean);
 
+function isVercelPreview(origin) {
+  return /^https:\/\/constru-[a-z0-9-]+-puffinho11s-projects\.vercel\.app$/i.test(
+    origin
+  );
+}
+
 app.use(
   cors({
     origin(origin, callback) {
-      // Postman, Insomnia e chamadas internas
+      // Permite Postman, Insomnia, Render e chamadas sem Origin
       if (!origin) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      const origemPermitida =
+        allowedOrigins.includes(origin) ||
+        isVercelPreview(origin);
+
+      if (origemPermitida) {
         return callback(null, true);
       }
 
-      console.log("Origem bloqueada pelo CORS:", origin);
+      console.error(
+        "Origem bloqueada pelo CORS:",
+        origin
+      );
 
       return callback(
         new Error("Origem não permitida pelo CORS")
       );
     },
+
     credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Accept",
+      "Origin",
+      "X-Requested-With",
+    ],
+
+    exposedHeaders: [
+      "Content-Disposition",
+    ],
+
+    optionsSuccessStatus: 204,
   })
 );
 
-app.use(helmet());
+// Responde às requisições OPTIONS do navegador
+app.options("*", cors());
+
+// ======================
+// SEGURANÇA E LOGS
+// ======================
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
+  })
+);
+
 app.use(morgan("dev"));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
-  message:
-    "Muitas requisições. Tente novamente mais tarde.",
+
+  standardHeaders: true,
+  legacyHeaders: false,
+
+  message: {
+    erro:
+      "Muitas requisições. Tente novamente mais tarde.",
+  },
 });
 
 app.use(limiter);
 
+// ======================
+// ARQUIVOS ESTÁTICOS
+// ======================
+
 app.use(
   "/uploads",
-  express.static(path.resolve("uploads"))
+  express.static(path.resolve("uploads"), {
+    setHeaders(res) {
+      res.setHeader(
+        "Access-Control-Allow-Origin",
+        "*"
+      );
+    },
+  })
 );
 
+// ======================
+// ROTA PRINCIPAL
+// ======================
+
 app.get("/", (req, res) => {
-  return res.json({
+  return res.status(200).json({
     mensagem:
       "API do Sistema de Compras funcionando.",
+    status: "online",
   });
 });
 
 // ======================
-// ROTAS
+// ROTAS DA API
 // ======================
 
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
-app.use("/api/secretarias", secretariaRoutes);
+app.use(
+  "/api/secretarias",
+  secretariaRoutes
+);
 
-app.use("/api/demandas", demandaRoutes);
+app.use(
+  "/api/demandas",
+  demandaRoutes
+);
 
-app.use("/api/fornecedores", fornecedorRoutes);
+app.use(
+  "/api/fornecedores",
+  fornecedorRoutes
+);
 
-app.use("/api/orcamentos", orcamentoRoutes);
+app.use(
+  "/api/orcamentos",
+  orcamentoRoutes
+);
 
-app.use("/api/cotacoes", cotacaoRoutes);
+app.use(
+  "/api/cotacoes",
+  cotacaoRoutes
+);
 
-app.use("/api/cotacoes", cotacaoChatRoutes);
+app.use(
+  "/api/cotacoes",
+  cotacaoChatRoutes
+);
 
-app.use("/api/propostas", propostaRoutes);
+app.use(
+  "/api/propostas",
+  propostaRoutes
+);
 
-app.use("/api/arquivos", arquivoRoutes);
+app.use(
+  "/api/arquivos",
+  arquivoRoutes
+);
 
-app.use("/api/sinapi", sinapiRoutes);
+app.use(
+  "/api/sinapi",
+  sinapiRoutes
+);
 
-app.use("/api/admin", adminRoutes);
+app.use(
+  "/api/admin",
+  adminRoutes
+);
 
 app.use(
   "/api/fornecedor-auth",
   fornecedorAuthRoutes
 );
 
-app.use("/api/empenhos", empenhoRoutes);
+app.use(
+  "/api/empenhos",
+  empenhoRoutes
+);
 
 app.use(
   "/api/fornecedor",
   fornecedorPortalRoutes
 );
 
-app.use("/api/chats", chatResultadoRoutes);
+app.use(
+  "/api/chats",
+  chatResultadoRoutes
+);
 
 // ======================
-// 404
+// ROTA NÃO ENCONTRADA
 // ======================
 
 app.use((req, res) => {
@@ -153,82 +274,111 @@ app.use((req, res) => {
 });
 
 // ======================
-// ERROS
+// TRATAMENTO DE ERROS
 // ======================
 
 app.use((error, req, res, next) => {
-  console.error("Erro não tratado:", error);
+  console.error(
+    "Erro não tratado:",
+    error
+  );
 
-  return res.status(error.status || 500).json({
-    erro:
-      error.message ||
-      "Erro interno do servidor.",
-  });
+  if (
+    error.message ===
+    "Origem não permitida pelo CORS"
+  ) {
+    return res.status(403).json({
+      erro:
+        "Origem não autorizada para acessar a API.",
+    });
+  }
+
+  return res
+    .status(error.status || 500)
+    .json({
+      erro:
+        error.message ||
+        "Erro interno do servidor.",
+    });
 });
 
 // ======================
-// MONGODB
+// FUNÇÃO PARA FINALIZAR
+// COTAÇÕES EXPIRADAS
 // ======================
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(async () => {
+async function verificarCotacoesExpiradas() {
+  try {
+    const total =
+      await finalizarCotacoesExpiradas();
+
+    if (total > 0) {
+      console.log(
+        `${total} cotação(ões) expirada(s) finalizada(s).`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Erro na verificação automática das cotações:",
+      error.message
+    );
+  }
+}
+
+// ======================
+// INICIALIZAÇÃO
+// ======================
+
+async function iniciarServidor() {
+  try {
+    if (!process.env.MONGO_URI) {
+      throw new Error(
+        "A variável MONGO_URI não foi configurada."
+      );
+    }
+
+    await mongoose.connect(
+      process.env.MONGO_URI
+    );
+
     console.log("MongoDB conectado");
 
     try {
       await verificarConexaoEmail();
     } catch (error) {
       console.error(
-        "Erro na conexão SMTP:",
+        "Erro ao verificar serviço de e-mail:",
         error.message
       );
     }
 
-    try {
-      const total =
-        await finalizarCotacoesExpiradas();
+    await verificarCotacoesExpiradas();
 
-      if (total > 0) {
+    setInterval(
+      verificarCotacoesExpiradas,
+      60 * 1000
+    );
+
+    const PORT =
+      Number(process.env.PORT) || 5000;
+
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
         console.log(
-          `${total} cotação(ões) expirada(s) finalizada(s).`
+          `Servidor rodando na porta ${PORT}`
         );
       }
-    } catch (error) {
-      console.error(
-        "Erro ao finalizar cotações:",
-        error.message
-      );
-    }
-
-    setInterval(async () => {
-      try {
-        const total =
-          await finalizarCotacoesExpiradas();
-
-        if (total > 0) {
-          console.log(
-            `${total} cotação(ões) expirada(s) finalizada(s).`
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Erro na verificação automática:",
-          error.message
-        );
-      }
-    }, 60000);
-
-    const PORT = process.env.PORT || 5000;
-
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(
-        `Servidor rodando na porta ${PORT}`
-      );
-    });
-  })
-  .catch((error) => {
+    );
+  } catch (error) {
     console.error(
-      "Erro ao conectar no MongoDB:",
+      "Erro ao iniciar o servidor:",
       error
     );
-  });
+
+    process.exit(1);
+  }
+}
+
+iniciarServidor();
