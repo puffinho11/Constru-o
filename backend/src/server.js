@@ -63,7 +63,7 @@ const allowedOrigins = [
   process.env.FRONT_URL,
 ].filter(Boolean);
 
-function isVercelPreview(origin) {
+function isVercelPreview(origin = "") {
   return /^https:\/\/constru-[a-z0-9-]+-puffinho11s-projects\.vercel\.app$/i.test(
     origin
   );
@@ -72,7 +72,7 @@ function isVercelPreview(origin) {
 app.use(
   cors({
     origin(origin, callback) {
-      // Permite Postman, Insomnia, Render e chamadas sem Origin
+      // Permite Postman, Insomnia, Render e chamadas internas.
       if (!origin) {
         return callback(null, true);
       }
@@ -122,8 +122,9 @@ app.use(
   })
 );
 
-// Responde às requisições OPTIONS do navegador
-app.options("*", cors());
+// Não use app.options("*", cors()).
+// Na versão atual do Express isso causa:
+// Missing parameter name at index 1: *
 
 // ======================
 // SEGURANÇA E LOGS
@@ -142,7 +143,6 @@ app.use(morgan("dev"));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
-
   standardHeaders: true,
   legacyHeaders: false,
 
@@ -303,7 +303,6 @@ app.use((error, req, res, next) => {
 });
 
 // ======================
-// FUNÇÃO PARA FINALIZAR
 // COTAÇÕES EXPIRADAS
 // ======================
 
