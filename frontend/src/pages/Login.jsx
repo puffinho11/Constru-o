@@ -13,8 +13,8 @@ import api from "../services/api";
 export default function Login() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("admin@email.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -67,6 +67,7 @@ export default function Login() {
 
         <form
           onSubmit={handleLogin}
+          autoComplete="off"
           className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
         >
           <h2 className="mb-1 text-xl font-semibold text-slate-900">
@@ -97,6 +98,8 @@ export default function Login() {
 
                 <input
                   type="email"
+                  name="email"
+                  autoComplete="off"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Digite seu e-mail"
@@ -119,6 +122,8 @@ export default function Login() {
 
                 <input
                   type={mostrarSenha ? "text" : "password"}
+                  name="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Digite sua senha"
