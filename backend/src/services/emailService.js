@@ -78,12 +78,20 @@ async function enviarPelaBrevo({
   }
 
   if (!response.ok) {
+    console.error("STATUS BREVO:", response.status)
+    console.error("RESPOSTA BREVO:", dados)
+
     throw new Error(
       dados.message ||
         dados.erro ||
         `Erro da Brevo: HTTP ${response.status}`
     )
   }
+
+  console.log("E-mail enviado pela Brevo:", {
+    destinatario,
+    messageId: dados.messageId || null,
+  })
 
   return dados
 }
@@ -213,8 +221,7 @@ export async function enviarEmailCotacao({
                 "-"
             )}
           </td>
-
-          <td
+                    <td
             style="
               border:1px solid #dbe3ef;
               padding:10px;
@@ -435,8 +442,7 @@ export async function enviarEmailCotacao({
                   </tbody>
                 </table>
               </div>
-
-              ${
+                            ${
                 observacaoCotacao
                   ? `
                     <div
