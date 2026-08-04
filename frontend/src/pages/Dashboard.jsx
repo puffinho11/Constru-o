@@ -3736,10 +3736,13 @@ export default function Dashboard() {
                                 </td>
 
                                 <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                                  {proposta.fornecedor?.empresa ||
-                                    proposta.fornecedor?.razaoSocial ||
-                                    "Fornecedor"}
-                                </td>
+                              {proposta.empresa ||
+                              proposta.fornecedor?.empresa ||
+                              proposta.fornecedor?.razaoSocial ||
+                              proposta.fornecedor?.nomeFantasia ||
+                              proposta.fornecedor?.responsavel ||
+                              "Fornecedor"}
+                              </td>
 
                                 <td className="px-5 py-4 text-sm font-bold text-slate-900">
                                   {formatarMoeda(
