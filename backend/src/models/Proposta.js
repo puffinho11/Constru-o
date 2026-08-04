@@ -56,14 +56,12 @@ const propostaSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Agora o fornecedor é opcional
     fornecedor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Fornecedor",
       default: null,
     },
 
-    // Dados informados pela empresa no link público
     empresa: {
       type: String,
       required: true,
@@ -74,7 +72,6 @@ const propostaSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      index: true,
     },
 
     responsavel: {
@@ -163,17 +160,6 @@ const propostaSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
-)
-
-// Uma proposta por CNPJ em cada cotação
-propostaSchema.index(
-  {
-    cotacao: 1,
-    cnpj: 1,
-  },
-  {
-    unique: true,
   }
 )
 
