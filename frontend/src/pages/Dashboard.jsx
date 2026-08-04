@@ -1546,6 +1546,293 @@ export default function Dashboard() {
     }
   }
 
+  async function abrirResultadoCotacao(cotacaoId) {
+    if (!cotacaoId) {
+      alert("Cotação não identificada.")
+      return
+    }
+
+    // O modal de detalhes pertence à tela de Cotações.
+    // Por isso, primeiro abrimos essa tela e depois carregamos a aba Resultado.
+    setTelaAtual("solicitacao")
+    setSidebarOpen(false)
+    await abrirCotacaoNaAba(cotacaoId, "resultado")
+  }
+
+  async function gerarRelatorioLances(cotacaoId) {
+    if (!cotacaoId) {
+      alert("Cotação não identificada.")
+      return
+    }
+
+    const escaparHtml = (valor = "") =>
+      String(valor)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;")
+
+    setCarregando(true)
+
+    try {
+      const response = await fetch(`${API_URL}/cotacoes/${cotacaoId}`, {
+        headers: authHeaders(),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.erro || "Erro ao carregar os dados do relatório.")
+      }
+
+      const cotacao = data.cotacao || {}
+      const demanda = cotacao.demanda || {}
+      const propostasRelatorio = Array.isArray(data.propostas)
+        ? [...data.propostas].sort(
+            (a, b) =>
+              new Date(a.createdAt || 0).getTime() -
+              new Date(b.createdAt || 0).getTime()
+          )
+        : []
+
+      const materiais = Array.isArray(demanda.materiais)
+        ? demanda.materiais
+        : []
+
+      const linhasPorItem = materiais
+        .map((material, indiceItem) => {
+          const descricao =
+            material.item || material.material || `Item ${indiceItem + 1}`
+
+          const linhas = propostasRelatorio
+            .map((proposta) => {
+              const itemProposta = proposta.itens?.[indiceItem] || {}
+              const nomeEmpresa =
+                proposta.empresa ||
+                proposta.fornecedor?.empresa ||
+                proposta.fornecedor?.razaoSocial ||
+                proposta.fornecedor?.responsavel ||
+                "Fornecedor não identificado"
+
+              const valorUnitario = Number(itemProposta.valorUnitario || 0)
+              const status = proposta.status || "Recebida"
+
+              return `
+                <tr>
+                  <td>${escaparHtml(dataHora(proposta.createdAt) || "-")}</td>
+                  <td>${escaparHtml(nomeEmpresa)}</td>
+                  <td>${escaparHtml(status.toUpperCase())}</td>
+                  <td class="valor">${escaparHtml(formatarMoeda(valorUnitario))}</td>
+                </tr>
+              `
+            })
+            .join("")
+
+          return `
+            <section class="lote">
+              <h3>ITEM ${indiceItem + 1} - ${escaparHtml(descricao)}</h3>
+              <p class="detalhe">Quantidade: ${escaparHtml(
+                material.quantidade || 0
+              )} ${escaparHtml(material.unidade || "")}</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>DATA/HORA</th>
+                    <th>EMPRESA</th>
+                    <th>SITUAÇÃO</th>
+                    <th>VALOR UNITÁRIO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    linhas ||
+                    '<tr><td colspan="4" class="vazio">Nenhuma proposta recebida para este item.</td></tr>'
+                  }
+                </tbody>
+              </table>
+            </section>
+          `
+        })
+        .join("")
+
+      const resumoPropostas = propostasRelatorio
+        .map((proposta, indice) => {
+          const nomeEmpresa =
+            proposta.empresa ||
+            proposta.fornecedor?.empresa ||
+            proposta.fornecedor?.razaoSocial ||
+            proposta.fornecedor?.responsavel ||
+            "Fornecedor não identificado"
+
+          return `
+            <tr>
+              <td>${indice + 1}º</td>
+              <td>${escaparHtml(nomeEmpresa)}</td>
+              <td>${escaparHtml(proposta.cnpj || "-")}</td>
+              <td>${escaparHtml(proposta.prazoEntrega || "-")}</td>
+              <td>${escaparHtml(proposta.status || "Recebida")}</td>
+              <td class="valor">${escaparHtml(
+                formatarMoeda(proposta.valorTotal || 0)
+              )}</td>
+            </tr>
+          `
+        })
+        .join("")
+
+      const janela = window.open("", "_blank", "width=1000,height=800")
+
+      if (!janela) {
+        throw new Error(
+          "O navegador bloqueou a abertura do relatório. Permita pop-ups e tente novamente."
+        )
+      }
+
+      janela.document.write(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+          <head>
+            <meta charset="UTF-8" />
+            <title>Relatório de Lances - ${escaparHtml(
+              cotacao.numero || "Cotação"
+            )}</title>
+            <style>
+              @page { size: A4; margin: 15mm; }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                color: #111827;
+                font-size: 11px;
+              }
+              .cabecalho {
+                text-align: center;
+                border-bottom: 2px solid #111827;
+                padding-bottom: 12px;
+                margin-bottom: 16px;
+              }
+              .cabecalho h1 { margin: 0 0 8px; font-size: 20px; }
+              .cabecalho h2 { margin: 0; font-size: 15px; }
+              .cabecalho p { margin: 5px 0 0; }
+              .dados {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 6px 20px;
+                margin-bottom: 18px;
+              }
+              .dados div { border-bottom: 1px solid #d1d5db; padding: 5px 0; }
+              .lote { margin: 18px 0; break-inside: avoid; }
+              .lote h3 {
+                margin: 0;
+                padding: 8px;
+                background: #e5e7eb;
+                border: 1px solid #9ca3af;
+                font-size: 12px;
+              }
+              .detalhe { margin: 6px 0; color: #4b5563; }
+              table { width: 100%; border-collapse: collapse; margin-top: 7px; }
+              th, td { border: 1px solid #9ca3af; padding: 7px; vertical-align: top; }
+              th { background: #f3f4f6; font-size: 10px; text-align: left; }
+              .valor { text-align: right; white-space: nowrap; font-weight: 700; }
+              .vazio { text-align: center; color: #6b7280; }
+              .resumo { margin-top: 22px; break-inside: avoid; }
+              .resumo h3 { margin-bottom: 8px; font-size: 13px; }
+              .rodape {
+                margin-top: 22px;
+                padding-top: 8px;
+                border-top: 1px solid #9ca3af;
+                display: flex;
+                justify-content: space-between;
+                color: #4b5563;
+                font-size: 9px;
+              }
+              .acoes { margin-bottom: 16px; text-align: right; }
+              .acoes button {
+                border: 0;
+                border-radius: 6px;
+                padding: 9px 14px;
+                background: #1d4ed8;
+                color: white;
+                font-weight: bold;
+                cursor: pointer;
+              }
+              @media print { .acoes { display: none; } }
+            </style>
+          </head>
+          <body>
+            <div class="acoes">
+              <button onclick="window.print()">Imprimir / Salvar em PDF</button>
+            </div>
+
+            <div class="cabecalho">
+              <h1>RELATÓRIO DE LANCES</h1>
+              <h2>COTAÇÃO ELETRÔNICA Nº ${escaparHtml(
+                cotacao.numero || "-"
+              )}</h2>
+              <p>MUNICÍPIO DE GENERAL CARNEIRO - PR</p>
+            </div>
+
+            <div class="dados">
+              <div><strong>Demanda:</strong> ${escaparHtml(
+                demanda.numeroDemanda || "-"
+              )}</div>
+              <div><strong>Status:</strong> ${escaparHtml(
+                cotacao.status || "-"
+              )}</div>
+              <div><strong>Objeto:</strong> ${escaparHtml(
+                demanda.objeto || "-"
+              )}</div>
+              <div><strong>Encerramento:</strong> ${escaparHtml(
+                dataHora(cotacao.encerraEm) || "-"
+              )}</div>
+              <div><strong>Secretaria:</strong> ${escaparHtml(
+                demanda.secretaria || "-"
+              )}</div>
+              <div><strong>Propostas recebidas:</strong> ${propostasRelatorio.length}</div>
+            </div>
+
+            ${linhasPorItem || '<p class="vazio">Nenhum item encontrado.</p>'}
+
+            <section class="resumo">
+              <h3>CLASSIFICAÇÃO FINAL DAS PROPOSTAS</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>CLASSIFICAÇÃO</th>
+                    <th>EMPRESA</th>
+                    <th>CNPJ</th>
+                    <th>ENTREGA</th>
+                    <th>STATUS</th>
+                    <th>VALOR TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    resumoPropostas ||
+                    '<tr><td colspan="6" class="vazio">Nenhuma proposta recebida.</td></tr>'
+                  }
+                </tbody>
+              </table>
+            </section>
+
+            <div class="rodape">
+              <span>Gerado em: ${escaparHtml(new Date().toLocaleString("pt-BR"))}</span>
+              <span>Sistema de Compras - Prefeitura de General Carneiro/PR</span>
+            </div>
+          </body>
+        </html>
+      `)
+
+      janela.document.close()
+      janela.focus()
+    } catch (error) {
+      console.error("Erro ao gerar relatório de lances:", error)
+      alert(error.message || "Erro ao gerar o relatório de lances.")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
   async function copiarLinkCotacao(token) {
     const link = `${window.location.origin}/cotacao/${token}`
 
@@ -3736,13 +4023,10 @@ export default function Dashboard() {
                                 </td>
 
                                 <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                              {proposta.empresa ||
-                              proposta.fornecedor?.empresa ||
-                              proposta.fornecedor?.razaoSocial ||
-                              proposta.fornecedor?.nomeFantasia ||
-                              proposta.fornecedor?.responsavel ||
-                              "Fornecedor"}
-                              </td>
+                                  {proposta.fornecedor?.empresa ||
+                                    proposta.fornecedor?.razaoSocial ||
+                                    "Fornecedor"}
+                                </td>
 
                                 <td className="px-5 py-4 text-sm font-bold text-slate-900">
                                   {formatarMoeda(
@@ -4788,10 +5072,10 @@ export default function Dashboard() {
                   const propostaVencedora = cotacao.propostaVencedora
 
                   const fornecedorVencedor =
+                    propostaVencedora?.empresa ||
                     propostaVencedora?.fornecedor?.empresa ||
                     propostaVencedora?.fornecedor?.razaoSocial ||
                     propostaVencedora?.fornecedor?.responsavel ||
-                    propostaVencedora?.fornecedor ||
                     "Não definido"
 
                   return (
@@ -4861,7 +5145,16 @@ export default function Dashboard() {
                             icon={Eye}
                             tone="blue"
                             onClick={() =>
-                              abrirCotacaoNaAba(cotacao._id, "resultado")
+                              abrirResultadoCotacao(cotacao._id)
+                            }
+                          />
+
+
+                          <ActionButton
+                            title="Gerar relatório de lances"
+                            icon={Download}
+                            onClick={() =>
+                              gerarRelatorioLances(cotacao._id)
                             }
                           />
 
