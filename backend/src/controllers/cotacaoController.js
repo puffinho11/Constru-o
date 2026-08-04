@@ -22,10 +22,7 @@ async function gerarNumeroCotacao() {
     },
   })
 
-  return `COT-${String(total + 1).padStart(
-    3,
-    "0"
-  )}/${ano}`
+  return `COT-${String(total + 1).padStart(3, "0")}/${ano}`
 }
 
 function criarTokenPublico() {
@@ -37,38 +34,31 @@ function criarTokenPublico() {
 function cotacaoEstaEncerrada(cotacao) {
   return (
     cotacao.status !== "Aberta" ||
-    new Date(cotacao.encerraEm).getTime() <=
-      Date.now()
+    new Date(cotacao.encerraEm).getTime() <= Date.now()
   )
 }
 
-export async function listarCotacoes(
-  req,
-  res
-) {
+export async function listarCotacoes(req, res) {
   try {
-    const cotacoes =
-      await Cotacao.find()
-        .populate({
-          path: "demanda",
+    const cotacoes = await Cotacao.find()
+      .populate({
+        path: "demanda",
+        select:
+          "numeroDemanda objeto secretaria materiais",
+      })
+      .populate({
+        path: "propostaVencedora",
+        populate: {
+          path: "fornecedor",
           select:
-            "numeroDemanda objeto secretaria materiais",
-        })
-        .populate({
-          path: "propostaVencedora",
-          populate: {
-            path: "fornecedor",
-            select:
-              "empresa razaoSocial email cnpj",
-          },
-        })
-        .sort({
-          createdAt: -1,
-        })
+            "empresa razaoSocial email cnpj",
+        },
+      })
+      .sort({
+        createdAt: -1,
+      })
 
-    return res.status(200).json(
-      cotacoes
-    )
+    return res.status(200).json(cotacoes)
   } catch (error) {
     console.error(
       "Erro ao listar cotações:",
@@ -84,28 +74,24 @@ export async function listarCotacoes(
   }
 }
 
-export async function buscarCotacao(
-  req,
-  res
-) {
+export async function buscarCotacao(req, res) {
   try {
-    const cotacao =
-      await Cotacao.findById(
-        req.params.id
-      )
-        .populate({
-          path: "demanda",
+    const cotacao = await Cotacao.findById(
+      req.params.id
+    )
+      .populate({
+        path: "demanda",
+        select:
+          "numeroDemanda objeto secretaria justificativa materiais",
+      })
+      .populate({
+        path: "propostaVencedora",
+        populate: {
+          path: "fornecedor",
           select:
-            "numeroDemanda objeto secretaria justificativa materiais",
-        })
-        .populate({
-          path: "propostaVencedora",
-          populate: {
-            path: "fornecedor",
-            select:
-              "empresa razaoSocial email cnpj responsavel",
-          },
-        })
+            "empresa razaoSocial email cnpj responsavel",
+        },
+      })
 
     if (!cotacao) {
       return res.status(404).json({
@@ -114,20 +100,19 @@ export async function buscarCotacao(
       })
     }
 
-    const propostas =
-      await Proposta.find({
-        cotacao:
-          cotacao._id,
+    const propostas = await Proposta.find({
+      cotacao:
+        cotacao._id,
+    })
+      .populate({
+        path: "fornecedor",
+        select:
+          "empresa razaoSocial email cnpj responsavel telefone cidade",
       })
-        .populate({
-          path: "fornecedor",
-          select:
-            "empresa razaoSocial email cnpj responsavel telefone cidade",
-        })
-        .sort({
-          valorTotal: 1,
-          createdAt: 1,
-        })
+      .sort({
+        valorTotal: 1,
+        createdAt: 1,
+      })
 
     return res.status(200).json({
       cotacao,
@@ -147,10 +132,7 @@ export async function buscarCotacao(
     })
   }
 }
-export async function criarCotacao(
-  req,
-  res
-) {
+export async function criarCotacao(req, res) {
   try {
     const {
       demandaId,
@@ -192,7 +174,8 @@ export async function criarCotacao(
       })
     }
 
-    const agora = new Date()
+    const agora =
+      new Date()
 
     const encerraEm =
       new Date(
@@ -214,7 +197,8 @@ export async function criarCotacao(
         tokenPublico:
           criarTokenPublico(),
 
-        participantes: [],
+        participantes:
+          [],
 
         inicioEm:
           agora,
@@ -252,13 +236,21 @@ export async function criarCotacao(
 
     return res.status(201).json({
       mensagem:
-        "Cotação criada com sucesso. Copie o link público e compartilhe com as empresas.",
+        "Cotação criada com sucesso.",
 
       cotacao:
         cotacaoCompleta,
 
       tokenPublico:
         cotacaoCompleta.tokenPublico,
+
+      linkPublico:
+        `${
+          process.env.FRONTEND_URL ||
+          "https://constru-o-pi.vercel.app"
+        }/cotacao/${
+          cotacaoCompleta.tokenPublico
+        }`,
     })
   } catch (error) {
     console.error(
@@ -275,7 +267,6 @@ export async function criarCotacao(
     })
   }
 }
-
 export async function encerrarCotacao(
   req,
   res
@@ -301,7 +292,6 @@ export async function encerrarCotacao(
         status: {
           $nin: [
             "Desclassificada",
-            "Reprovado",
           ],
         },
       }).sort({
@@ -325,7 +315,7 @@ export async function encerrarCotacao(
 
       return res.status(200).json({
         mensagem:
-          "Cotação encerrada sem propostas válidas.",
+          "Cotação encerrada sem propostas.",
 
         cotacao,
       })
@@ -337,10 +327,8 @@ export async function encerrarCotacao(
           cotacao._id,
       },
       {
-        $set: {
-          status:
-            "Classificada",
-        },
+        status:
+          "Classificada",
       }
     )
 
@@ -354,8 +342,8 @@ export async function encerrarCotacao(
       new Date()
 
     vencedora.julgadaPor =
-      req.user?.id ||
       req.user?._id ||
+      req.user?.id ||
       null
 
     await vencedora.save()
@@ -384,7 +372,7 @@ export async function encerrarCotacao(
               "fornecedor",
 
             select:
-              "empresa razaoSocial email cnpj responsavel",
+              "empresa razaoSocial email cnpj",
           },
         })
         .populate({
@@ -397,7 +385,7 @@ export async function encerrarCotacao(
 
     return res.status(200).json({
       mensagem:
-        "Cotação encerrada e vencedor calculado.",
+        "Cotação encerrada.",
 
       cotacao:
         resultado,
@@ -522,102 +510,112 @@ export async function acessarCotacaoPublica(
   res
 ) {
   try {
-    const { token } = req.params
+    const { token } =
+      req.params
 
     const cotacao =
       await Cotacao.findOne({
-        tokenPublico: token,
+        tokenPublico:
+          token,
       }).populate({
-        path: "demanda",
+        path:
+          "demanda",
+
         select:
           "numeroDemanda objeto secretaria justificativa materiais",
       })
 
     if (!cotacao) {
-      return res.status(404).json({
-        erro:
-          "Link de cotação inválido.",
-      })
+      return res
+        .status(404)
+        .json({
+          erro:
+            "Link de cotação inválido.",
+        })
     }
-
-    const proposta =
-      await Proposta.findOne({
-        cotacao:
-          cotacao._id,
-      })
 
     const encerrada =
       cotacaoEstaEncerrada(
         cotacao
       )
 
-    return res.status(200).json({
-      cotacao: {
-        _id:
-          cotacao._id,
+    return res
+      .status(200)
+      .json({
+        cotacao: {
+          _id:
+            cotacao._id,
 
-        numero:
-          cotacao.numero,
+          numero:
+            cotacao.numero,
 
-        prazoHoras:
-          cotacao.prazoHoras,
+          prazoHoras:
+            cotacao.prazoHoras,
 
-        encerraEm:
-          cotacao.encerraEm,
+          inicioEm:
+            cotacao.inicioEm,
 
-        observacao:
-          cotacao.observacao,
+          encerraEm:
+            cotacao.encerraEm,
 
-        status:
-          cotacao.status,
+          observacao:
+            cotacao.observacao,
 
-        tokenPublico:
-          cotacao.tokenPublico,
-      },
+          status:
+            cotacao.status,
 
-      demanda: {
-        _id:
-          cotacao.demanda._id,
+          tokenPublico:
+            cotacao.tokenPublico,
+        },
 
-        numeroDemanda:
-          cotacao.demanda
-            .numeroDemanda,
+        demanda: {
+          _id:
+            cotacao.demanda._id,
 
-        objeto:
-          cotacao.demanda
-            .objeto,
+          numeroDemanda:
+            cotacao.demanda
+              .numeroDemanda,
 
-        secretaria:
-          cotacao.demanda
-            .secretaria,
+          objeto:
+            cotacao.demanda
+              .objeto,
 
-        justificativa:
-          cotacao.demanda
-            .justificativa,
+          secretaria:
+            cotacao.demanda
+              .secretaria,
 
-        materiais:
-          cotacao.demanda
-            .materiais || [],
-      },
+          justificativa:
+            cotacao.demanda
+              .justificativa,
 
-      podeResponder:
-        !encerrada,
+          materiais:
+            cotacao.demanda
+              .materiais || [],
+        },
 
-      propostaEnviada:
-        Boolean(proposta),
-    })
+        // O mesmo link pode ser usado por várias empresas.
+        // A duplicidade será bloqueada somente pelo CNPJ
+        // no envio da proposta.
+        podeResponder:
+          !encerrada,
+
+        propostaEnviada:
+          false,
+      })
   } catch (error) {
     console.error(
       "Erro ao acessar cotação pública:",
       error
     )
 
-    return res.status(500).json({
-      erro:
-        "Erro ao abrir a cotação.",
+    return res
+      .status(500)
+      .json({
+        erro:
+          "Erro ao abrir a cotação.",
 
-      detalhe:
-        error.message,
-    })
+        detalhe:
+          error.message,
+      })
   }
 }
