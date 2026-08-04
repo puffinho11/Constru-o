@@ -5,18 +5,18 @@ const participanteSchema = new mongoose.Schema(
     fornecedor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Fornecedor",
-      required: true,
+      default: null,
     },
 
     token: {
       type: String,
-      required: true,
+      default: "",
       index: true,
     },
 
     email: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
       lowercase: true,
     },
@@ -66,14 +66,17 @@ const cotacaoSchema = new mongoose.Schema(
       required: true,
     },
 
+    tokenPublico: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+    },
+
     participantes: {
       type: [participanteSchema],
-      validate: {
-        validator: (itens) =>
-          Array.isArray(itens) && itens.length > 0,
-        message:
-          "A cotação precisa possuir pelo menos um fornecedor.",
-      },
+      default: [],
     },
 
     prazoHoras: {

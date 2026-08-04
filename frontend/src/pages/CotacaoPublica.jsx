@@ -11,7 +11,8 @@ import {
 } from "lucide-react"
 
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  (import.meta.env.VITE_API_URL ||
+    "https://constru-o.onrender.com") + "/api"
 
 function formatarMoeda(valor) {
   return Number(valor || 0).toLocaleString("pt-BR", {
@@ -51,6 +52,11 @@ export default function CotacaoPublica() {
 
   const [dados, setDados] = useState(null)
   const [itens, setItens] = useState([])
+  const [empresa, setEmpresa] = useState("")
+  const [cnpj, setCnpj] = useState("")
+  const [responsavel, setResponsavel] = useState("")
+  const [email, setEmail] = useState("")
+  const [telefone, setTelefone] = useState("")
   const [prazoEntrega, setPrazoEntrega] = useState("")
   const [validadeDias, setValidadeDias] = useState(60)
   const [observacao, setObservacao] = useState("")
@@ -108,6 +114,7 @@ export default function CotacaoPublica() {
           quantidade: Number(item.quantidade || 0),
           unidade: item.unidade || "",
           observacao: item.observacao || "",
+          marca: "",
           valorUnitario: "",
         }))
       )
@@ -128,14 +135,11 @@ export default function CotacaoPublica() {
     }, 0)
   }, [itens])
 
-  function alterarValor(index, valor) {
+  function alterarItem(index, campo, valor) {
     setItens((itensAtuais) =>
       itensAtuais.map((item, itemIndex) =>
         itemIndex === index
-          ? {
-              ...item,
-              valorUnitario: valor,
-            }
+          ? { ...item, [campo]: valor }
           : item
       )
     )
@@ -146,6 +150,26 @@ export default function CotacaoPublica() {
 
     setErro("")
     setSucesso("")
+
+    if (!empresa.trim()) {
+      setErro("Informe o nome ou razão social da empresa.")
+      return
+    }
+
+    if (cnpj.replace(/\D/g, "").length !== 14) {
+      setErro("Informe um CNPJ válido com 14 números.")
+      return
+    }
+
+    if (!responsavel.trim()) {
+      setErro("Informe o responsável pela proposta.")
+      return
+    }
+
+    if (!email.trim()) {
+      setErro("Informe o e-mail da empresa.")
+      return
+    }
 
     if (
       itens.some(
@@ -182,7 +206,13 @@ export default function CotacaoPublica() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            empresa: empresa.trim(),
+            cnpj: cnpj.replace(/\D/g, ""),
+            responsavel: responsavel.trim(),
+            email: email.trim(),
+            telefone: telefone.trim(),
             itens: itens.map((item) => ({
+              marca: item.marca || "",
               valorUnitario: Number(item.valorUnitario),
             })),
             prazoEntrega: prazoEntrega.trim(),
@@ -336,6 +366,69 @@ export default function CotacaoPublica() {
           >
             <div className="border-b border-slate-100 p-5">
               <h2 className="font-semibold text-slate-900">
+                Dados da empresa
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Preencha os dados que identificarão sua proposta.
+              </p>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-medium text-slate-700 md:col-span-2">
+                  Nome ou razão social *
+                  <input
+                    disabled={bloqueado}
+                    value={empresa}
+                    onChange={(event) => setEmpresa(event.target.value)}
+                    className="h-11 rounded-xl border border-slate-300 px-3.5 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-slate-700">
+                  CNPJ *
+                  <input
+                    disabled={bloqueado}
+                    value={cnpj}
+                    onChange={(event) => setCnpj(event.target.value)}
+                    placeholder="Somente números"
+                    className="h-11 rounded-xl border border-slate-300 px-3.5 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-slate-700">
+                  Responsável *
+                  <input
+                    disabled={bloqueado}
+                    value={responsavel}
+                    onChange={(event) => setResponsavel(event.target.value)}
+                    className="h-11 rounded-xl border border-slate-300 px-3.5 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-slate-700">
+                  E-mail *
+                  <input
+                    type="email"
+                    disabled={bloqueado}
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="h-11 rounded-xl border border-slate-300 px-3.5 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-slate-700">
+                  Telefone
+                  <input
+                    disabled={bloqueado}
+                    value={telefone}
+                    onChange={(event) => setTelefone(event.target.value)}
+                    className="h-11 rounded-xl border border-slate-300 px-3.5 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="border-b border-slate-100 p-5">
+              <h2 className="font-semibold text-slate-900">
                 Itens da cotação
               </h2>
 
@@ -351,6 +444,7 @@ export default function CotacaoPublica() {
                     <th className="px-5 py-3.5">Item</th>
                     <th className="px-5 py-3.5">Descrição</th>
                     <th className="px-5 py-3.5">Quantidade</th>
+                    <th className="px-5 py-3.5">Marca</th>
                     <th className="px-5 py-3.5">Valor unitário</th>
                     <th className="px-5 py-3.5">Total</th>
                   </tr>
@@ -386,14 +480,27 @@ export default function CotacaoPublica() {
 
                         <td className="px-5 py-4">
                           <input
+                            disabled={bloqueado}
+                            value={item.marca}
+                            onChange={(event) =>
+                              alterarItem(index, "marca", event.target.value)
+                            }
+                            placeholder="Marca"
+                            className="h-11 w-36 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                          />
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <input
                             type="number"
                             min="0"
                             step="0.01"
                             disabled={bloqueado}
                             value={item.valorUnitario}
                             onChange={(event) =>
-                              alterarValor(
+                              alterarItem(
                                 index,
+                                "valorUnitario",
                                 event.target.value
                               )
                             }
@@ -492,56 +599,12 @@ export default function CotacaoPublica() {
           <aside className="space-y-6">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="font-semibold text-slate-900">
-                Dados do fornecedor
+                Participação pública
               </h2>
-
-              <p className="mt-4 text-sm font-semibold text-slate-800">
-                {dados.fornecedor.empresa}
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Este link pode ser compartilhado. Cada empresa deve informar
+                seus próprios dados e só poderá enviar uma proposta por CNPJ.
               </p>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {dados.fornecedor.email}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="font-semibold text-slate-900">
-                Informações da demanda
-              </h2>
-
-              <div className="mt-4 space-y-4 text-sm">
-                <div>
-                  <p className="text-xs uppercase text-slate-500">
-                    Número
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {dados.demanda.numeroDemanda || "-"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase text-slate-500">
-                    Secretaria
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {dados.demanda.secretaria || "-"}
-                  </p>
-                </div>
-
-                {dados.cotacao.observacao && (
-                  <div>
-                    <p className="text-xs uppercase text-slate-500">
-                      Observações
-                    </p>
-
-                    <p className="mt-1 leading-6 text-slate-700">
-                      {dados.cotacao.observacao}
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
 
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
@@ -552,7 +615,7 @@ export default function CotacaoPublica() {
                 />
 
                 <p className="text-xs leading-5 text-blue-800">
-                  Este link é exclusivo para sua empresa. A proposta será
+                  Este link é público e compartilhável. A proposta será
                   registrada com data e horário de envio.
                 </p>
               </div>

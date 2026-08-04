@@ -1261,11 +1261,6 @@ export default function Dashboard() {
       return
     }
 
-    if (novaCotacao.fornecedorIds.length === 0) {
-      alert("Selecione pelo menos um fornecedor.")
-      return
-    }
-
     const horas = Number(novaCotacao.prazoHoras)
 
     if (!Number.isFinite(horas) || horas < 1 || horas > 720) {
@@ -1293,7 +1288,7 @@ export default function Dashboard() {
         throw new Error(data.erro || "Erro ao criar cotação.")
       }
 
-      alert(data.mensagem || "Cotação criada e enviada com sucesso.")
+      alert(data.mensagem || "Cotação criada com sucesso.")
 
       setNovaCotacao({
         demandaId: "",
@@ -3267,7 +3262,7 @@ export default function Dashboard() {
                 </div>
 
                 <p className="mt-3 text-sm font-semibold text-blue-700">
-                  {novaCotacao.fornecedorIds.length} fornecedor(es) selecionado(s)
+                  {novaCotacao.fornecedorIds.length} fornecedor(es) selecionado(s) — opcional
                 </p>
               </div>
 
@@ -3440,6 +3435,15 @@ export default function Dashboard() {
                           />
 
                           <ActionButton
+                            title="Copiar link público da cotação"
+                            icon={Copy}
+                            tone="blue"
+                            onClick={() =>
+                              copiarLinkCotacao(item.tokenPublico)
+                            }
+                          />
+
+                          <ActionButton
                             title="Conversar com fornecedores"
                             icon={MessageCircle}
                             tone="emerald"
@@ -3458,11 +3462,11 @@ export default function Dashboard() {
                           {item.status === "Aberta" && (
                             <>
                               <ActionButton
-                                title="Reenviar e-mails"
-                                icon={Mail}
+                                title="Copiar link público"
+                                icon={Copy}
                                 tone="blue"
                                 onClick={() =>
-                                  executarAcaoCotacao(item._id, "reenviar")
+                                  copiarLinkCotacao(item.tokenPublico)
                                 }
                               />
 

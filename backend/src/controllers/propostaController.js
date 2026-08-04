@@ -1,201 +1,339 @@
 import Cotacao from "../models/Cotacao.js"
 import Proposta from "../models/Proposta.js"
 
-import { finalizarCotacao } from "../services/cotacaoService.js"
-
 async function gerarNumeroProposta() {
   const ano = new Date().getFullYear()
 
   const total = await Proposta.countDocuments({
     createdAt: {
-      $gte: new Date(`${ano}-01-01T00:00:00.000Z`),
-      $lte: new Date(`${ano}-12-31T23:59:59.999Z`),
+      $gte: new Date(
+        `${ano}-01-01T00:00:00.000Z`
+      ),
+
+      $lte: new Date(
+        `${ano}-12-31T23:59:59.999Z`
+      ),
     },
   })
 
-  return `PROP-${String(total + 1).padStart(3, "0")}/${ano}`
+  return `PROP-${String(
+    total + 1
+  ).padStart(3, "0")}/${ano}`
 }
 
-export async function enviarPropostaPublica(req, res) {
+function limparCnpj(valor = "") {
+  return String(valor).replace(
+    /\D/g,
+    ""
+  )
+}
+
+export async function enviarPropostaPublica(
+  req,
+  res
+) {
   try {
-    const cotacao = await Cotacao.findOne({
-      "participantes.token": req.params.token,
-    }).populate({
-      path: "demanda",
-      select:
-        "numeroDemanda objeto secretaria justificativa materiais",
-    })
+    const cotacao =
+      await Cotacao.findOne({
+        tokenPublico:
+          req.params.token,
+      }).populate({
+        path: "demanda",
+
+        select:
+          "numeroDemanda objeto secretaria justificativa materiais",
+      })
 
     if (!cotacao) {
       return res.status(404).json({
-        erro: "Link de cotação inválido.",
+        erro:
+          "Link de cotação inválido.",
       })
     }
 
     if (
       cotacao.status !== "Aberta" ||
-      new Date() >= new Date(cotacao.encerraEm)
+      new Date() >=
+        new Date(
+          cotacao.encerraEm
+        )
     ) {
-      if (cotacao.status === "Aberta") {
-        await finalizarCotacao(cotacao._id)
-      }
-
       return res.status(400).json({
-        erro: "O prazo para envio da proposta foi encerrado.",
-      })
-    }
-
-    const participante = cotacao.participantes.find(
-      (item) => item.token === req.params.token
-    )
-
-    if (!participante) {
-      return res.status(404).json({
-        erro: "Fornecedor participante não encontrado.",
-      })
-    }
-
-    const propostaExistente = await Proposta.findOne({
-      cotacao: cotacao._id,
-      fornecedor: participante.fornecedor,
-    })
-
-    if (propostaExistente) {
-      return res.status(409).json({
-        erro: "Sua empresa já enviou uma proposta para esta cotação.",
+        erro:
+          "O prazo para envio da proposta foi encerrado.",
       })
     }
 
     const {
+      empresa,
+      cnpj,
+      responsavel,
+      email,
+      telefone,
       itens,
       prazoEntrega,
       validadeDias,
       observacao,
     } = req.body
 
-    if (!Array.isArray(itens) || itens.length === 0) {
+    const cnpjLimpo =
+      limparCnpj(cnpj)
+
+    if (!empresa?.trim()) {
       return res.status(400).json({
-        erro: "Informe os valores dos itens.",
+        erro:
+          "Informe o nome ou razão social da empresa.",
       })
     }
 
-    const materiaisDemanda = cotacao.demanda?.materiais || []
+    if (
+      cnpjLimpo.length !== 14
+    ) {
+      return res.status(400).json({
+        erro:
+          "Informe um CNPJ válido com 14 números.",
+      })
+    }
 
-    if (itens.length !== materiaisDemanda.length) {
+    if (!responsavel?.trim()) {
+      return res.status(400).json({
+        erro:
+          "Informe o responsável pela proposta.",
+      })
+    }
+
+    if (!email?.trim()) {
+      return res.status(400).json({
+        erro:
+          "Informe o e-mail da empresa.",
+      })
+    }
+
+    const propostaExistente =
+      await Proposta.findOne({
+        cotacao:
+          cotacao._id,
+
+        cnpj:
+          cnpjLimpo,
+      })
+
+    if (propostaExistente) {
+      return res.status(409).json({
+        erro:
+          "Já existe uma proposta deste CNPJ para esta cotação.",
+      })
+    }
+
+    if (
+      !Array.isArray(itens) ||
+      itens.length === 0
+    ) {
+      return res.status(400).json({
+        erro:
+          "Informe os valores dos itens.",
+      })
+    }
+
+    const materiaisDemanda =
+      cotacao.demanda?.materiais ||
+      []
+
+    if (
+      itens.length !==
+      materiaisDemanda.length
+    ) {
       return res.status(400).json({
         erro:
           "A quantidade de itens enviados não corresponde à demanda.",
       })
     }
+        const itensTratados =
+      materiaisDemanda.map(
+        (material, index) => {
+          const valorUnitario =
+            Number(
+              itens[index]
+                ?.valorUnitario
+            )
 
-    const itensTratados = materiaisDemanda.map(
-      (material, index) => {
-        const valorUnitario = Number(
-          itens[index]?.valorUnitario
-        )
+          const marca =
+            String(
+              itens[index]
+                ?.marca || ""
+            ).trim()
 
-        if (
-          !Number.isFinite(valorUnitario) ||
-          valorUnitario < 0
-        ) {
-          throw new Error(
-            `Valor unitário inválido no item ${index + 1}.`
-          )
-        }
-
-        const quantidade = Number(
-          material.quantidade || 0
-        )
-
-        return {
-          material:
-            material.item ||
-            material.material,
-          quantidade,
-          unidade:
-            material.unidade,
-          observacao:
-            material.observacao ||
-            "",
-          valorUnitario,
-          valorTotal: Number(
-            (
-              quantidade *
+          if (
+            !Number.isFinite(
               valorUnitario
-            ).toFixed(2)
-          ),
+            ) ||
+            valorUnitario < 0
+          ) {
+            throw new Error(
+              `Valor unitário inválido no item ${
+                index + 1
+              }.`
+            )
+          }
+
+          const quantidade =
+            Number(
+              material.quantidade ||
+                0
+            )
+
+          return {
+            material:
+              material.item ||
+              material.material ||
+              "-",
+
+            quantidade,
+
+            unidade:
+              material.unidade ||
+              "",
+
+            marca,
+
+            valorUnitario,
+
+            valorTotal:
+              Number(
+                (
+                  quantidade *
+                  valorUnitario
+                ).toFixed(2)
+              ),
+          }
         }
-      }
-    )
+      )
 
-    const valorTotal = Number(
-      itensTratados
-        .reduce(
-          (total, item) =>
-            total + item.valorTotal,
-          0
-        )
-        .toFixed(2)
-    )
+    const valorTotal =
+      Number(
+        itensTratados
+          .reduce(
+            (
+              total,
+              item
+            ) =>
+              total +
+              item.valorTotal,
+            0
+          )
+          .toFixed(2)
+      )
 
-    const proposta = await Proposta.create({
-      numero:
-        await gerarNumeroProposta(),
-      cotacao:
-        cotacao._id,
-      fornecedor:
-        participante.fornecedor,
-      participanteToken:
-        req.params.token,
-      itens:
-        itensTratados,
-      valorReferenciaSinapi:
-        valorTotal,
-      percentualDesconto:
-        0,
-      valorTotal,
-      prazoEntrega:
-        prazoEntrega || "",
-      validadeDias:
-        Number(validadeDias || 60),
-      observacao:
-        observacao || "",
-      status:
-        "Recebida",
-    })
-
-    participante.respondidoEm =
-      new Date()
-
-    await cotacao.save()
-
-    return res.status(201).json({
-      mensagem:
-        "Proposta enviada com sucesso.",
-      proposta: {
+    const proposta =
+      await Proposta.create({
         numero:
-          proposta.numero,
-        valorTotal:
-          proposta.valorTotal,
-        recebidaEm:
-          proposta.createdAt,
-      },
-    })
+          await gerarNumeroProposta(),
+
+        cotacao:
+          cotacao._id,
+
+        fornecedor:
+          null,
+
+        empresa:
+          empresa.trim(),
+
+        cnpj:
+          cnpjLimpo,
+
+        responsavel:
+          responsavel.trim(),
+
+        email:
+          email
+            .trim()
+            .toLowerCase(),
+
+        telefone:
+          String(
+            telefone || ""
+          ).trim(),
+
+        itens:
+          itensTratados,
+
+        valorReferenciaSinapi:
+          valorTotal,
+
+        percentualDesconto:
+          0,
+
+        valorTotal,
+
+        prazoEntrega:
+          String(
+            prazoEntrega || ""
+          ).trim(),
+
+        validadeDias:
+          Number(
+            validadeDias || 60
+          ),
+
+        observacao:
+          String(
+            observacao || ""
+          ).trim(),
+
+        status:
+          "Recebida",
+      })
+
+    return res
+      .status(201)
+      .json({
+        mensagem:
+          "Proposta enviada com sucesso.",
+
+        proposta: {
+          numero:
+            proposta.numero,
+
+          empresa:
+            proposta.empresa,
+
+          valorTotal:
+            proposta.valorTotal,
+
+          recebidaEm:
+            proposta.createdAt,
+        },
+      })
   } catch (error) {
     console.error(
       "Erro ao enviar proposta:",
       error
     )
 
-    return res.status(500).json({
-      erro:
-        error.message ||
-        "Erro ao enviar a proposta.",
-    })
+    if (
+      error?.code === 11000
+    ) {
+      return res
+        .status(409)
+        .json({
+          erro:
+            "Já existe uma proposta deste CNPJ para esta cotação.",
+        })
+    }
+
+    return res
+      .status(500)
+      .json({
+        erro:
+          error.message ||
+          "Erro ao enviar a proposta.",
+      })
   }
 }
-
-export async function listarPropostas(req, res) {
+export async function listarPropostas(
+  req,
+  res
+) {
   try {
     const filtro = {}
 
@@ -205,49 +343,70 @@ export async function listarPropostas(req, res) {
     }
 
     const propostas =
-      await Proposta.find(filtro)
+      await Proposta.find(
+        filtro
+      )
         .populate({
-          path: "cotacao",
+          path:
+            "cotacao",
+
           populate: {
-            path: "demanda",
+            path:
+              "demanda",
+
             select:
               "numeroDemanda objeto secretaria justificativa materiais",
           },
         })
         .populate({
-          path: "fornecedor",
+          path:
+            "fornecedor",
+
           select:
             "empresa razaoSocial email cnpj responsavel telefone cidade",
         })
         .populate({
-          path: "julgadaPor",
+          path:
+            "julgadaPor",
+
           select:
             "nome email perfil role",
         })
         .sort({
-          valorTotal: 1,
-          createdAt: 1,
+          valorTotal:
+            1,
+
+          createdAt:
+            1,
         })
 
     return res
       .status(200)
-      .json(propostas)
+      .json(
+        propostas
+      )
   } catch (error) {
     console.error(
       "Erro ao listar propostas:",
       error
     )
 
-    return res.status(500).json({
-      erro:
-        "Erro ao listar propostas.",
-      detalhe:
-        error.message,
-    })
+    return res
+      .status(500)
+      .json({
+        erro:
+          "Erro ao listar propostas.",
+
+        detalhe:
+          error.message,
+      })
   }
 }
 
-export async function julgarProposta(req, res) {
+export async function julgarProposta(
+  req,
+  res
+) {
   try {
     const {
       status,
@@ -265,10 +424,12 @@ export async function julgarProposta(req, res) {
         status
       )
     ) {
-      return res.status(400).json({
-        erro:
-          "Status de julgamento inválido.",
-      })
+      return res
+        .status(400)
+        .json({
+          erro:
+            "Status de julgamento inválido.",
+        })
     }
 
     const proposta =
@@ -277,10 +438,12 @@ export async function julgarProposta(req, res) {
       )
 
     if (!proposta) {
-      return res.status(404).json({
-        erro:
-          "Proposta não encontrada.",
-      })
+      return res
+        .status(404)
+        .json({
+          erro:
+            "Proposta não encontrada.",
+        })
     }
 
     if (
@@ -291,10 +454,12 @@ export async function julgarProposta(req, res) {
         {
           cotacao:
             proposta.cotacao,
+
           _id: {
             $ne:
               proposta._id,
           },
+
           status:
             "Vencedora",
         },
@@ -309,8 +474,10 @@ export async function julgarProposta(req, res) {
         {
           propostaVencedora:
             proposta._id,
+
           status:
             "Finalizada",
+
           finalizadaEm:
             new Date(),
         }
@@ -333,27 +500,36 @@ export async function julgarProposta(req, res) {
 
     await proposta.save()
 
-    return res.status(200).json({
-      mensagem:
-        "Julgamento salvo.",
-      proposta,
-    })
+    return res
+      .status(200)
+      .json({
+        mensagem:
+          "Julgamento salvo.",
+
+        proposta,
+      })
   } catch (error) {
     console.error(
       "Erro ao julgar proposta:",
       error
     )
 
-    return res.status(500).json({
-      erro:
-        "Erro ao julgar proposta.",
-      detalhe:
-        error.message,
-    })
+    return res
+      .status(500)
+      .json({
+        erro:
+          "Erro ao julgar proposta.",
+
+        detalhe:
+          error.message,
+      })
   }
 }
 
-export async function excluirProposta(req, res) {
+export async function excluirProposta(
+  req,
+  res
+) {
   try {
     const proposta =
       await Proposta.findByIdAndDelete(
@@ -361,27 +537,34 @@ export async function excluirProposta(req, res) {
       )
 
     if (!proposta) {
-      return res.status(404).json({
-        erro:
-          "Proposta não encontrada.",
-      })
+      return res
+        .status(404)
+        .json({
+          erro:
+            "Proposta não encontrada.",
+        })
     }
 
-    return res.status(200).json({
-      mensagem:
-        "Proposta excluída.",
-    })
+    return res
+      .status(200)
+      .json({
+        mensagem:
+          "Proposta excluída.",
+      })
   } catch (error) {
     console.error(
       "Erro ao excluir proposta:",
       error
     )
 
-    return res.status(500).json({
-      erro:
-        "Erro ao excluir proposta.",
-      detalhe:
-        error.message,
-    })
+    return res
+      .status(500)
+      .json({
+        erro:
+          "Erro ao excluir proposta.",
+
+        detalhe:
+          error.message,
+      })
   }
 }
