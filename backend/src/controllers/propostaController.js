@@ -109,22 +109,6 @@ export async function enviarPropostaPublica(
       })
     }
 
-    const propostaExistente =
-      await Proposta.findOne({
-        cotacao:
-          cotacao._id,
-
-        cnpj:
-          cnpjLimpo,
-      })
-
-    if (propostaExistente) {
-      return res.status(409).json({
-        erro:
-          "Já existe uma proposta deste CNPJ para esta cotação.",
-      })
-    }
-
     if (
       !Array.isArray(itens) ||
       itens.length === 0
@@ -153,33 +137,26 @@ export async function enviarPropostaPublica(
         (material, index) => {
           const valorUnitario =
             Number(
-              itens[index]
-                ?.valorUnitario
+              itens[index]?.valorUnitario
             )
 
           const marca =
             String(
-              itens[index]
-                ?.marca || ""
+              itens[index]?.marca || ""
             ).trim()
 
           if (
-            !Number.isFinite(
-              valorUnitario
-            ) ||
+            !Number.isFinite(valorUnitario) ||
             valorUnitario < 0
           ) {
             throw new Error(
-              `Valor unitário inválido no item ${
-                index + 1
-              }.`
+              `Valor unitário inválido no item ${index + 1}.`
             )
           }
 
           const quantidade =
             Number(
-              material.quantidade ||
-                0
+              material.quantidade || 0
             )
 
           return {
@@ -198,13 +175,12 @@ export async function enviarPropostaPublica(
 
             valorUnitario,
 
-            valorTotal:
-              Number(
-                (
-                  quantidade *
-                  valorUnitario
-                ).toFixed(2)
-              ),
+            valorTotal: Number(
+              (
+                quantidade *
+                valorUnitario
+              ).toFixed(2)
+            ),
           }
         }
       )
@@ -284,52 +260,38 @@ export async function enviarPropostaPublica(
           "Recebida",
       })
 
-    return res
-      .status(201)
-      .json({
-        mensagem:
-          "Proposta enviada com sucesso.",
+    return res.status(201).json({
+      mensagem:
+        "Proposta enviada com sucesso.",
 
-        proposta: {
-          numero:
-            proposta.numero,
+      proposta: {
+        numero:
+          proposta.numero,
 
-          empresa:
-            proposta.empresa,
+        empresa:
+          proposta.empresa,
 
-          valorTotal:
-            proposta.valorTotal,
+        valorTotal:
+          proposta.valorTotal,
 
-          recebidaEm:
-            proposta.createdAt,
-        },
-      })
-  } catch (error) {
+        recebidaEm:
+          proposta.createdAt,
+      },
+    })
+      } catch (error) {
     console.error(
       "Erro ao enviar proposta:",
       error
     )
 
-    if (
-      error?.code === 11000
-    ) {
-      return res
-        .status(409)
-        .json({
-          erro:
-            "Já existe uma proposta deste CNPJ para esta cotação.",
-        })
-    }
-
-    return res
-      .status(500)
-      .json({
-        erro:
-          error.message ||
-          "Erro ao enviar a proposta.",
-      })
+    return res.status(500).json({
+      erro:
+        error.message ||
+        "Erro ao enviar a proposta.",
+    })
   }
 }
+
 export async function listarPropostas(
   req,
   res
