@@ -59,7 +59,7 @@ app.use(cookieParser());
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://construopi.vercel.app/",
+  "https://construopi.vercel.app",
   process.env.FRONT_URL,
 ].filter(Boolean);
 
