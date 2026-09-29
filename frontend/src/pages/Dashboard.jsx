@@ -1552,10 +1552,6 @@ export default function Dashboard() {
       return
     }
 
-    // O modal de detalhes pertence à tela de Cotações.
-    // Por isso, primeiro abrimos essa tela e depois carregamos a aba Resultado.
-    setTelaAtual("solicitacao")
-    setSidebarOpen(false)
     await abrirCotacaoNaAba(cotacaoId, "resultado")
   }
 
@@ -3796,478 +3792,7 @@ export default function Dashboard() {
         )}
       </Card>
 
-      {mostrarDetalhesCotacao && cotacaoSelecionada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-          <div className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {cotacaoSelecionada.cotacao?.numero || "Detalhes da cotação"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Propostas, julgamento e resultado da cotação.
-                </p>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMostrarDetalhesCotacao(false)
-                  setCotacaoSelecionada(null)
-                  setAbaCotacao("visao")
-                }}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="sticky top-[73px] z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-5">
-              {[
-                ["visao", "Visão geral", Eye],
-                ["propostas", "Propostas", ClipboardList],
-                ["julgamento", "Julgamento", Gavel],
-                ["resultado", "Resultado", Trophy],
-              ].map(([id, nome, Icon]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setAbaCotacao(id)}
-                  className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition ${
-                    abaCotacao === id
-                      ? "border-blue-600 text-blue-700"
-                      : "border-transparent text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <Icon size={16} />
-                  {nome}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-6 p-5">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">
-                    Demanda
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {cotacaoSelecionada.cotacao?.demanda?.numeroDemanda || "-"}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">
-                    Propostas recebidas
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {(cotacaoSelecionada.propostas || []).length}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">
-                    Encerramento
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {cotacaoSelecionada.cotacao?.encerraEm
-                      ? new Date(
-                          cotacaoSelecionada.cotacao.encerraEm
-                        ).toLocaleString("pt-BR")
-                      : "-"}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">
-                    Status
-                  </p>
-                  <div className="mt-2">
-                    <StatusBadge
-                      status={cotacaoSelecionada.cotacao?.status || "Aberta"}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {abaCotacao === "visao" && (
-                <Card>
-                  <CardHeader
-                    title="Fornecedores convidados"
-                    description="Situação do envio, visualização e resposta."
-                  />
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px]">
-                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="px-5 py-3.5">Fornecedor</th>
-                          <th className="px-5 py-3.5">E-mail</th>
-                          <th className="px-5 py-3.5">Envio</th>
-                          <th className="px-5 py-3.5">Visualização</th>
-                          <th className="px-5 py-3.5">Resposta</th>
-                          <th className="px-5 py-3.5 text-right">Link</th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-slate-100">
-                        {(
-                          cotacaoSelecionada.cotacao?.participantes || []
-                        ).map((participante) => (
-                          <tr key={participante._id || participante.token}>
-                            <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                              {participante.fornecedor?.empresa ||
-                                participante.fornecedor?.razaoSocial ||
-                                "Fornecedor"}
-                            </td>
-
-                            <td className="px-5 py-4 text-sm text-slate-600">
-                              {participante.email ||
-                                participante.fornecedor?.email ||
-                                "-"}
-                            </td>
-
-                            <td className="px-5 py-4">
-                              <StatusBadge
-                                status={
-                                  participante.emailEnviado
-                                    ? "Enviado"
-                                    : "Pendente"
-                                }
-                              />
-                              {participante.erroEmail && (
-                                <p className="mt-2 max-w-xs text-xs text-red-600">
-                                  {participante.erroEmail}
-                                </p>
-                              )}
-                            </td>
-
-                            <td className="px-5 py-4 text-sm text-slate-600">
-                              {participante.visualizadoEm
-                                ? new Date(
-                                    participante.visualizadoEm
-                                  ).toLocaleString("pt-BR")
-                                : "Não visualizado"}
-                            </td>
-
-                            <td className="px-5 py-4 text-sm text-slate-600">
-                              {participante.respondeuEm
-                                ? new Date(
-                                    participante.respondeuEm
-                                  ).toLocaleString("pt-BR")
-                                : "Aguardando"}
-                            </td>
-
-                            <td className="px-5 py-4">
-                              <div className="flex justify-end">
-                                <ActionButton
-                                  title="Copiar link do fornecedor"
-                                  icon={Copy}
-                                  tone="blue"
-                                  onClick={() =>
-                                    copiarLinkCotacao(participante.token)
-                                  }
-                                />
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
-
-              {abaCotacao === "propostas" && (
-                <Card>
-                  <CardHeader
-                    title="Propostas recebidas"
-                    description="Propostas enviadas diretamente pelos fornecedores."
-                  />
-
-                  {(cotacaoSelecionada.propostas || []).length === 0 ? (
-                    <EmptyState
-                      icon={ClipboardList}
-                      title="Nenhuma proposta recebida"
-                      description="Os fornecedores ainda não enviaram valores para esta cotação."
-                    />
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[980px]">
-                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          <tr>
-                            <th className="px-5 py-3.5">Classificação</th>
-                            <th className="px-5 py-3.5">Fornecedor</th>
-                            <th className="px-5 py-3.5">Valor total</th>
-                            <th className="px-5 py-3.5">Entrega</th>
-                            <th className="px-5 py-3.5">Validade</th>
-                            <th className="px-5 py-3.5">Recebida em</th>
-                            <th className="px-5 py-3.5">Status</th>
-                          </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-slate-100">
-                          {(cotacaoSelecionada.propostas || []).map(
-                            (proposta, index) => (
-                              <tr key={proposta._id}>
-                                <td className="px-5 py-4">
-                                  <div
-                                    className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
-                                      index === 0
-                                        ? "bg-amber-100 text-amber-700"
-                                        : "bg-slate-100 text-slate-600"
-                                    }`}
-                                  >
-                                    {index + 1}º
-                                  </div>
-                                </td>
-
-                                <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                                  {proposta.fornecedor?.empresa ||
-                                    proposta.fornecedor?.razaoSocial ||
-                                    "Fornecedor"}
-                                </td>
-
-                                <td className="px-5 py-4 text-sm font-bold text-slate-900">
-                                  {formatarMoeda(
-                                    proposta.valorTotal || proposta.valor
-                                  )}
-                                </td>
-
-                                <td className="px-5 py-4 text-sm text-slate-600">
-                                  {proposta.prazoEntrega || "-"}
-                                </td>
-
-                                <td className="px-5 py-4 text-sm text-slate-600">
-                                  {proposta.validadeDias ||
-                                    proposta.validade ||
-                                    60}{" "}
-                                  dias
-                                </td>
-
-                                <td className="px-5 py-4 text-sm text-slate-600">
-                                  {proposta.recebidaEm || proposta.createdAt
-                                    ? new Date(
-                                        proposta.recebidaEm ||
-                                          proposta.createdAt
-                                      ).toLocaleString("pt-BR")
-                                    : "-"}
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  <StatusBadge status={proposta.status} />
-                                </td>
-                              </tr>
-                            )
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {abaCotacao === "julgamento" && (
-                <Card>
-                  <CardHeader
-                    title="Julgamento das propostas"
-                    description="Classifique, desclassifique ou declare a proposta vencedora."
-                  />
-
-                  {(cotacaoSelecionada.propostas || []).length === 0 ? (
-                    <EmptyState
-                      icon={Gavel}
-                      title="Nenhuma proposta para julgar"
-                      description="Aguarde o recebimento das propostas dos fornecedores."
-                    />
-                  ) : (
-                    <div className="divide-y divide-slate-100">
-                      {(cotacaoSelecionada.propostas || []).map(
-                        (proposta, index) => (
-                          <div
-                            key={proposta._id}
-                            className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between"
-                          >
-                            <div className="flex items-start gap-4">
-                              <div
-                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                                  index === 0
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}
-                              >
-                                {index + 1}º
-                              </div>
-
-                              <div>
-                                <p className="font-semibold text-slate-900">
-                                  {proposta.fornecedor?.empresa ||
-                                    proposta.fornecedor?.razaoSocial ||
-                                    "Fornecedor"}
-                                </p>
-                                <p className="mt-1 text-xl font-bold text-slate-900">
-                                  {formatarMoeda(
-                                    proposta.valorTotal || proposta.valor
-                                  )}
-                                </p>
-                                <div className="mt-2">
-                                  <StatusBadge status={proposta.status} />
-                                </div>
-                                {proposta.justificativaJulgamento && (
-                                  <p className="mt-2 max-w-2xl text-sm text-red-600">
-                                    {proposta.justificativaJulgamento}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                disabled={carregando}
-                                onClick={() =>
-                                  julgarPropostaCotacao(
-                                    proposta._id,
-                                    "Classificada"
-                                  )
-                                }
-                                className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                              >
-                                Classificar
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={carregando}
-                                onClick={() => {
-                                  const motivo = prompt(
-                                    "Informe o motivo da desclassificação:"
-                                  )
-
-                                  if (motivo?.trim()) {
-                                    julgarPropostaCotacao(
-                                      proposta._id,
-                                      "Desclassificada",
-                                      motivo.trim()
-                                    )
-                                  }
-                                }}
-                                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                              >
-                                Desclassificar
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={
-                                  carregando ||
-                                  proposta.status === "Desclassificada"
-                                }
-                                onClick={() =>
-                                  julgarPropostaCotacao(
-                                    proposta._id,
-                                    "Vencedora"
-                                  )
-                                }
-                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <Trophy size={16} />
-                                Declarar vencedora
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {abaCotacao === "resultado" && (
-                <Card>
-                  <CardHeader
-                    title="Resultado da cotação"
-                    description="Resultado final definido no julgamento."
-                  />
-
-                  {!cotacaoSelecionada.cotacao?.propostaVencedora ? (
-                    <EmptyState
-                      icon={Trophy}
-                      title="Resultado ainda não definido"
-                      description="Abra a aba Julgamento e declare uma proposta vencedora."
-                    />
-                  ) : (
-                    <div className="p-6">
-                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
-                        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                          <div className="w-fit rounded-xl bg-emerald-600 p-3 text-white">
-                            <Trophy size={26} />
-                          </div>
-
-                          <div className="flex-1">
-                            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                              Proposta vencedora
-                            </p>
-
-                            <h3 className="mt-2 text-xl font-bold text-emerald-950">
-                              {cotacaoSelecionada.cotacao.propostaVencedora
-                                .fornecedor?.empresa ||
-                                cotacaoSelecionada.cotacao.propostaVencedora
-                                  .fornecedor?.razaoSocial ||
-                                "Fornecedor vencedor"}
-                            </h3>
-
-                            <p className="mt-3 text-3xl font-bold text-emerald-700">
-                              {formatarMoeda(
-                                cotacaoSelecionada.cotacao
-                                  .propostaVencedora.valorTotal ||
-                                  cotacaoSelecionada.cotacao
-                                    .propostaVencedora.valor
-                              )}
-                            </p>
-
-                            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                              <div className="rounded-xl bg-white/70 p-4">
-                                <p className="text-xs uppercase text-emerald-700">
-                                  Cotação
-                                </p>
-                                <p className="mt-1 font-semibold text-emerald-950">
-                                  {cotacaoSelecionada.cotacao.numero}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-white/70 p-4">
-                                <p className="text-xs uppercase text-emerald-700">
-                                  Entrega
-                                </p>
-                                <p className="mt-1 font-semibold text-emerald-950">
-                                  {cotacaoSelecionada.cotacao.propostaVencedora
-                                    .prazoEntrega || "-"}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-white/70 p-4">
-                                <p className="text-xs uppercase text-emerald-700">
-                                  Validade
-                                </p>
-                                <p className="mt-1 font-semibold text-emerald-950">
-                                  {cotacaoSelecionada.cotacao.propostaVencedora
-                                    .validadeDias || 60}{" "}
-                                  dias
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
     </>
   )
@@ -6046,6 +5571,479 @@ export default function Dashboard() {
           {!fornecedorLogado && telaAtual === "arquivos" && ArquivosPage}
         </main>
       </div>
+
+      {mostrarDetalhesCotacao && cotacaoSelecionada && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {cotacaoSelecionada.cotacao?.numero || "Detalhes da cotação"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Propostas, julgamento e resultado da cotação.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMostrarDetalhesCotacao(false)
+                  setCotacaoSelecionada(null)
+                  setAbaCotacao("visao")
+                }}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="sticky top-[73px] z-10 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-5">
+              {[
+                ["visao", "Visão geral", Eye],
+                ["propostas", "Propostas", ClipboardList],
+                ["julgamento", "Julgamento", Gavel],
+                ["resultado", "Resultado", Trophy],
+              ].map(([id, nome, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAbaCotacao(id)}
+                  className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition ${
+                    abaCotacao === id
+                      ? "border-blue-600 text-blue-700"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {nome}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-6 p-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Demanda
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {cotacaoSelecionada.cotacao?.demanda?.numeroDemanda || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Propostas recebidas
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {(cotacaoSelecionada.propostas || []).length}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Encerramento
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {cotacaoSelecionada.cotacao?.encerraEm
+                      ? new Date(
+                          cotacaoSelecionada.cotacao.encerraEm
+                        ).toLocaleString("pt-BR")
+                      : "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Status
+                  </p>
+                  <div className="mt-2">
+                    <StatusBadge
+                      status={cotacaoSelecionada.cotacao?.status || "Aberta"}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {abaCotacao === "visao" && (
+                <Card>
+                  <CardHeader
+                    title="Fornecedores convidados"
+                    description="Situação do envio, visualização e resposta."
+                  />
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px]">
+                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-5 py-3.5">Fornecedor</th>
+                          <th className="px-5 py-3.5">E-mail</th>
+                          <th className="px-5 py-3.5">Envio</th>
+                          <th className="px-5 py-3.5">Visualização</th>
+                          <th className="px-5 py-3.5">Resposta</th>
+                          <th className="px-5 py-3.5 text-right">Link</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100">
+                        {(
+                          cotacaoSelecionada.cotacao?.participantes || []
+                        ).map((participante) => (
+                          <tr key={participante._id || participante.token}>
+                            <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                              {participante.fornecedor?.empresa ||
+                                participante.fornecedor?.razaoSocial ||
+                                "Fornecedor"}
+                            </td>
+
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {participante.email ||
+                                participante.fornecedor?.email ||
+                                "-"}
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <StatusBadge
+                                status={
+                                  participante.emailEnviado
+                                    ? "Enviado"
+                                    : "Pendente"
+                                }
+                              />
+                              {participante.erroEmail && (
+                                <p className="mt-2 max-w-xs text-xs text-red-600">
+                                  {participante.erroEmail}
+                                </p>
+                              )}
+                            </td>
+
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {participante.visualizadoEm
+                                ? new Date(
+                                    participante.visualizadoEm
+                                  ).toLocaleString("pt-BR")
+                                : "Não visualizado"}
+                            </td>
+
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {participante.respondeuEm
+                                ? new Date(
+                                    participante.respondeuEm
+                                  ).toLocaleString("pt-BR")
+                                : "Aguardando"}
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <div className="flex justify-end">
+                                <ActionButton
+                                  title="Copiar link do fornecedor"
+                                  icon={Copy}
+                                  tone="blue"
+                                  onClick={() =>
+                                    copiarLinkCotacao(participante.token)
+                                  }
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {abaCotacao === "propostas" && (
+                <Card>
+                  <CardHeader
+                    title="Propostas recebidas"
+                    description="Propostas enviadas diretamente pelos fornecedores."
+                  />
+
+                  {(cotacaoSelecionada.propostas || []).length === 0 ? (
+                    <EmptyState
+                      icon={ClipboardList}
+                      title="Nenhuma proposta recebida"
+                      description="Os fornecedores ainda não enviaram valores para esta cotação."
+                    />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[980px]">
+                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-5 py-3.5">Classificação</th>
+                            <th className="px-5 py-3.5">Fornecedor</th>
+                            <th className="px-5 py-3.5">Valor total</th>
+                            <th className="px-5 py-3.5">Entrega</th>
+                            <th className="px-5 py-3.5">Validade</th>
+                            <th className="px-5 py-3.5">Recebida em</th>
+                            <th className="px-5 py-3.5">Status</th>
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+                          {(cotacaoSelecionada.propostas || []).map(
+                            (proposta, index) => (
+                              <tr key={proposta._id}>
+                                <td className="px-5 py-4">
+                                  <div
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                                      index === 0
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-slate-100 text-slate-600"
+                                    }`}
+                                  >
+                                    {index + 1}º
+                                  </div>
+                                </td>
+
+                                <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                                  {proposta.fornecedor?.empresa ||
+                                    proposta.fornecedor?.razaoSocial ||
+                                    "Fornecedor"}
+                                </td>
+
+                                <td className="px-5 py-4 text-sm font-bold text-slate-900">
+                                  {formatarMoeda(
+                                    proposta.valorTotal || proposta.valor
+                                  )}
+                                </td>
+
+                                <td className="px-5 py-4 text-sm text-slate-600">
+                                  {proposta.prazoEntrega || "-"}
+                                </td>
+
+                                <td className="px-5 py-4 text-sm text-slate-600">
+                                  {proposta.validadeDias ||
+                                    proposta.validade ||
+                                    60}{" "}
+                                  dias
+                                </td>
+
+                                <td className="px-5 py-4 text-sm text-slate-600">
+                                  {proposta.recebidaEm || proposta.createdAt
+                                    ? new Date(
+                                        proposta.recebidaEm ||
+                                          proposta.createdAt
+                                      ).toLocaleString("pt-BR")
+                                    : "-"}
+                                </td>
+
+                                <td className="px-5 py-4">
+                                  <StatusBadge status={proposta.status} />
+                                </td>
+                              </tr>
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {abaCotacao === "julgamento" && (
+                <Card>
+                  <CardHeader
+                    title="Julgamento das propostas"
+                    description="Classifique, desclassifique ou declare a proposta vencedora."
+                  />
+
+                  {(cotacaoSelecionada.propostas || []).length === 0 ? (
+                    <EmptyState
+                      icon={Gavel}
+                      title="Nenhuma proposta para julgar"
+                      description="Aguarde o recebimento das propostas dos fornecedores."
+                    />
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {(cotacaoSelecionada.propostas || []).map(
+                        (proposta, index) => (
+                          <div
+                            key={proposta._id}
+                            className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between"
+                          >
+                            <div className="flex items-start gap-4">
+                              <div
+                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                                  index === 0
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {index + 1}º
+                              </div>
+
+                              <div>
+                                <p className="font-semibold text-slate-900">
+                                  {proposta.fornecedor?.empresa ||
+                                    proposta.fornecedor?.razaoSocial ||
+                                    "Fornecedor"}
+                                </p>
+                                <p className="mt-1 text-xl font-bold text-slate-900">
+                                  {formatarMoeda(
+                                    proposta.valorTotal || proposta.valor
+                                  )}
+                                </p>
+                                <div className="mt-2">
+                                  <StatusBadge status={proposta.status} />
+                                </div>
+                                {proposta.justificativaJulgamento && (
+                                  <p className="mt-2 max-w-2xl text-sm text-red-600">
+                                    {proposta.justificativaJulgamento}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={carregando}
+                                onClick={() =>
+                                  julgarPropostaCotacao(
+                                    proposta._id,
+                                    "Classificada"
+                                  )
+                                }
+                                className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                              >
+                                Classificar
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={carregando}
+                                onClick={() => {
+                                  const motivo = prompt(
+                                    "Informe o motivo da desclassificação:"
+                                  )
+
+                                  if (motivo?.trim()) {
+                                    julgarPropostaCotacao(
+                                      proposta._id,
+                                      "Desclassificada",
+                                      motivo.trim()
+                                    )
+                                  }
+                                }}
+                                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                Desclassificar
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={
+                                  carregando ||
+                                  proposta.status === "Desclassificada"
+                                }
+                                onClick={() =>
+                                  julgarPropostaCotacao(
+                                    proposta._id,
+                                    "Vencedora"
+                                  )
+                                }
+                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Trophy size={16} />
+                                Declarar vencedora
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {abaCotacao === "resultado" && (
+                <Card>
+                  <CardHeader
+                    title="Resultado da cotação"
+                    description="Resultado final definido no julgamento."
+                  />
+
+                  {!cotacaoSelecionada.cotacao?.propostaVencedora ? (
+                    <EmptyState
+                      icon={Trophy}
+                      title="Resultado ainda não definido"
+                      description="Abra a aba Julgamento e declare uma proposta vencedora."
+                    />
+                  ) : (
+                    <div className="p-6">
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+                        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                          <div className="w-fit rounded-xl bg-emerald-600 p-3 text-white">
+                            <Trophy size={26} />
+                          </div>
+
+                          <div className="flex-1">
+                            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                              Proposta vencedora
+                            </p>
+
+                            <h3 className="mt-2 text-xl font-bold text-emerald-950">
+                              {cotacaoSelecionada.cotacao.propostaVencedora
+                                .fornecedor?.empresa ||
+                                cotacaoSelecionada.cotacao.propostaVencedora
+                                  .fornecedor?.razaoSocial ||
+                                "Fornecedor vencedor"}
+                            </h3>
+
+                            <p className="mt-3 text-3xl font-bold text-emerald-700">
+                              {formatarMoeda(
+                                cotacaoSelecionada.cotacao
+                                  .propostaVencedora.valorTotal ||
+                                  cotacaoSelecionada.cotacao
+                                    .propostaVencedora.valor
+                              )}
+                            </p>
+
+                            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                              <div className="rounded-xl bg-white/70 p-4">
+                                <p className="text-xs uppercase text-emerald-700">
+                                  Cotação
+                                </p>
+                                <p className="mt-1 font-semibold text-emerald-950">
+                                  {cotacaoSelecionada.cotacao.numero}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-white/70 p-4">
+                                <p className="text-xs uppercase text-emerald-700">
+                                  Entrega
+                                </p>
+                                <p className="mt-1 font-semibold text-emerald-950">
+                                  {cotacaoSelecionada.cotacao.propostaVencedora
+                                    .prazoEntrega || "-"}
+                                </p>
+                              </div>
+
+                              <div className="rounded-xl bg-white/70 p-4">
+                                <p className="text-xs uppercase text-emerald-700">
+                                  Validade
+                                </p>
+                                <p className="mt-1 font-semibold text-emerald-950">
+                                  {cotacaoSelecionada.cotacao.propostaVencedora
+                                    .validadeDias || 60}{" "}
+                                  dias
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {chatResultado && (
   <ResultadoChatModal
