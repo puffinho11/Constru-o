@@ -593,8 +593,6 @@ function ResultadoChatModal({
   )
 }
 
-
-
 const API_URL = `${
   import.meta.env.VITE_API_URL || "https://constru-o.onrender.com"
 }/api`
@@ -690,7 +688,6 @@ function PageHeader({ eyebrow, title, description, actionLabel, onAction, second
           </button>
         )}
       </div>
-
     </div>
   )
 }
@@ -827,7 +824,6 @@ function ActionButton({ title, icon: Icon, onClick, tone = "default" }) {
     </button>
   )
 }
-
 
 function SinapiSelector({ material, onSelect, onManualChange }) {
   const [busca, setBusca] = useState(
@@ -1919,7 +1915,6 @@ export default function Dashboard() {
       old.map((item) => (item.id === id ? { ...item, [campo]: valor } : item))
     )
   }
-
 
   function alterarImagemItem(id, arquivo) {
     if (!arquivo) {
@@ -3791,9 +3786,6 @@ export default function Dashboard() {
           </div>
         )}
       </Card>
-
-
-
     </>
   )
 
@@ -4673,7 +4665,6 @@ export default function Dashboard() {
                               abrirResultadoCotacao(cotacao._id)
                             }
                           />
-
 
                           <ActionButton
                             title="Gerar relatório de lances"
@@ -5847,7 +5838,11 @@ export default function Dashboard() {
                 <Card>
                   <CardHeader
                     title="Julgamento das propostas"
-                    description="Classifique, desclassifique ou declare a proposta vencedora."
+                    description={
+                      fornecedorLogado
+                        ? "Acompanhe a situação e o julgamento das propostas."
+                        : "Classifique, desclassifique ou declare a proposta vencedora."
+                    }
                   />
 
                   {(cotacaoSelecionada.propostas || []).length === 0 ? (
@@ -5897,60 +5892,63 @@ export default function Dashboard() {
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                disabled={carregando}
-                                onClick={() =>
-                                  julgarPropostaCotacao(
-                                    proposta._id,
-                                    "Classificada"
-                                  )
-                                }
-                                className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                              >
-                                Classificar
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={carregando}
-                                onClick={() => {
-                                  const motivo = prompt(
-                                    "Informe o motivo da desclassificação:"
-                                  )
-
-                                  if (motivo?.trim()) {
+                            {/* Os botões de julgamento e declaração de vencedor não aparecem para fornecedores[cite: 3] */}
+                            {!fornecedorLogado && (
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={carregando}
+                                  onClick={() =>
                                     julgarPropostaCotacao(
                                       proposta._id,
-                                      "Desclassificada",
-                                      motivo.trim()
+                                      "Classificada"
                                     )
                                   }
-                                }}
-                                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                              >
-                                Desclassificar
-                              </button>
+                                  className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                                >
+                                  Classificar
+                                </button>
 
-                              <button
-                                type="button"
-                                disabled={
-                                  carregando ||
-                                  proposta.status === "Desclassificada"
-                                }
-                                onClick={() =>
-                                  julgarPropostaCotacao(
-                                    proposta._id,
-                                    "Vencedora"
-                                  )
-                                }
-                                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <Trophy size={16} />
-                                Declarar vencedora
-                              </button>
-                            </div>
+                                <button
+                                  type="button"
+                                  disabled={carregando}
+                                  onClick={() => {
+                                    const motivo = prompt(
+                                      "Informe o motivo da desclassificação:"
+                                    )
+
+                                    if (motivo?.trim()) {
+                                      julgarPropostaCotacao(
+                                        proposta._id,
+                                        "Desclassificada",
+                                        motivo.trim()
+                                      )
+                                    }
+                                  }}
+                                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  Desclassificar
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    carregando ||
+                                    proposta.status === "Desclassificada"
+                                  }
+                                  onClick={() =>
+                                    julgarPropostaCotacao(
+                                      proposta._id,
+                                      "Vencedora"
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trophy size={16} />
+                                  Declarar vencedora
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )
                       )}
@@ -6046,15 +6044,15 @@ export default function Dashboard() {
       )}
 
       {chatResultado && (
-  <ResultadoChatModal
-    apiUrl={API_URL}
-    authHeaders={authHeaders}
-    cotacaoId={chatResultado.cotacaoId}
-    titulo={`Chat da cotação ${chatResultado.numero}`}
-    subtitulo={chatResultado.fornecedor}
-    onClose={() => setChatResultado(null)}
-  />
-)}
+        <ResultadoChatModal
+          apiUrl={API_URL}
+          authHeaders={authHeaders}
+          cotacaoId={chatResultado.cotacaoId}
+          titulo={`Chat da cotação ${chatResultado.numero}`}
+          subtitulo={chatResultado.fornecedor}
+          onClose={() => setChatResultado(null)}
+        />
+      )}
     </div>
   )
 }
