@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { LogOut, MessageCircle, ReceiptText, Trophy } from "lucide-react"
+import { LogOut, MessageCircle, ReceiptText } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import ResultadoChatModal from "../components/ResultadoChatModal"
 
